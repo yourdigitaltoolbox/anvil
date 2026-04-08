@@ -1,0 +1,18 @@
+{
+  "name": "anvil",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "packages/layers/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  }
+}

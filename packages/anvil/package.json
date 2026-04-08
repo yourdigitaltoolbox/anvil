@@ -1,0 +1,19 @@
+{
+  "name": "@ydtb/anvil",
+  "version": "0.0.1",
+  "description": "Anvil — composable full-stack plugin framework",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./server": "./src/server.ts"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.8.0"
+  }
+}
