@@ -51,7 +51,8 @@ export function createLayerConfig<K extends keyof LayerMap>(
   tag: Context.Tag<LayerMap[K], LayerMap[K]>,
   layer: Layer.Layer<LayerMap[K], never, never>,
   options?: {
-    healthCheck?: Effect.Effect<HealthStatus, never, never>
+    /** Health check Effect. May require the layer's own service (runs inside ManagedRuntime). */
+    healthCheck?: Effect.Effect<HealthStatus, never, any>
   },
 ): LayerConfig<K> {
   return {

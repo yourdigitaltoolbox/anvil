@@ -12,8 +12,10 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "drizzle-orm": "^0.45.2",
     "effect": "^3.21.0",
     "hono": "^4.12.12",
+    "postgres": "^3.4.9",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }
