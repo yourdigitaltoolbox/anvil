@@ -91,7 +91,7 @@ export interface ServerConfig {
   middleware?: MiddlewareEntry[]
   /** App-level server routes (not tools, not extensions) */
   routes?: Record<string, unknown>
-  /** Port to listen on (default: 3000) */
+  /** @deprecated The framework doesn't bind ports. Use Bun.serve({ port, fetch: server.app.fetch }). */
   port?: number
 }
 
@@ -284,7 +284,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
       globalThis.process.on('SIGINT', shutdownHandler)
     }
 
-    logger.info({ port }, 'Anvil server listening')
+    logger.info({}, 'Anvil server ready')
   }
 
   // -----------------------------------------------------------------------
