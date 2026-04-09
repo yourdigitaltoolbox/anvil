@@ -26,6 +26,10 @@
 export { createServer } from './create-server.ts'
 export type { ServerConfig, AnvilServer } from './create-server.ts'
 
+// Worker entry point
+export { createWorker } from './create-worker.ts'
+export type { WorkerConfig, AnvilWorker } from './create-worker.ts'
+
 // Accessors
 export { getLayer, getHooks, getContributions } from './accessors.ts'
 

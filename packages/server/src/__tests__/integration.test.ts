@@ -16,8 +16,8 @@ import { Context, Effect, Layer } from 'effect'
 import { Hono } from 'hono'
 import { defineApp, defineServer, defineExtension, scope } from '@ydtb/anvil'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createServer, getLayer, getHooks, getRequestContext, getLogger, fromOrpc } from '../index.ts'
-import { provideLayerResolver, provideHookSystem } from '../accessors.ts'
+import { createServer, createWorker, getLayer, getHooks, getRequestContext, getLogger, fromOrpc } from '../index.ts'
+import { provideLayerResolver, provideHookSystem, provideContributions } from '../accessors.ts'
 
 // ---------------------------------------------------------------------------
 // Test layer: a simple in-memory key-value store
@@ -115,6 +115,29 @@ const testTool = {
 }
 
 // ---------------------------------------------------------------------------
+// Test tool with jobs (for worker tests)
+// ---------------------------------------------------------------------------
+
+const jobHandler = async () => { /* process job */ }
+
+const jobToolSurface = defineServer({
+  hooks: {
+    actions: {
+      'jobs:greet': (input: unknown) => `Worker says hello`,
+    },
+  },
+  jobs: [
+    { id: 'cleanup', label: 'Nightly cleanup', schedule: '0 3 * * *', handler: jobHandler },
+    { id: 'sync', label: 'Sync external data', trigger: 'manual', handler: jobHandler },
+  ],
+})
+
+const jobTool = {
+  id: 'job-tool',
+  module: { default: jobToolSurface },
+}
+
+// ---------------------------------------------------------------------------
 // Cleanup
 // ---------------------------------------------------------------------------
 
@@ -122,6 +145,7 @@ afterEach(() => {
   // Reset module-level singletons between tests
   provideLayerResolver(null)
   provideHookSystem(null)
+  provideContributions(null)
 })
 
 // ---------------------------------------------------------------------------
@@ -378,5 +402,98 @@ describe('anvil-server integration', () => {
     expect(body.handled).toBe(true)
 
     await server.shutdown()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Error handling tests
+// ---------------------------------------------------------------------------
+
+describe('error handling', () => {
+  it('catches unhandled errors and returns clean JSON', async () => {
+    const config = defineApp({
+      brand: { name: 'Error Test' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({ config, tools: [] })
+
+    // Register a route that throws BEFORE first request
+    server.app.get('/api/explode', () => {
+      throw new Error('Something went wrong')
+    })
+
+    await server.start()
+
+    const res = await server.app.request('/api/explode')
+    expect(res.status).toBe(500)
+    const body = await res.json()
+    expect(body.error).toBe('Internal server error')
+    expect(body.requestId).toBeDefined()
+
+    await server.shutdown()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Worker tests
+// ---------------------------------------------------------------------------
+
+describe('anvil-worker', () => {
+  it('boots layers and registers hooks without HTTP', async () => {
+    const config = defineApp({
+      brand: { name: 'Worker Test' },
+      layers: {
+        testStore: createTestStoreLayer(),
+      } as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const worker = createWorker({
+      config,
+      tools: [jobTool],
+    })
+
+    await worker.start()
+
+    // Layers are available
+    const store = getLayer('testStore')
+    store.set('worker', 'yes')
+    expect(store.get('worker')).toBe('yes')
+
+    // Hooks are registered
+    const hooks = getHooks()
+    const result = await hooks.doAction('jobs:greet', {})
+    expect(result).toBe('Worker says hello')
+
+    // Jobs are collected
+    const jobs = worker.getJobs()
+    expect(jobs).toHaveLength(2)
+    expect(jobs.find(j => j.id === 'cleanup')).toBeDefined()
+    expect(jobs.find(j => j.id === 'sync')).toBeDefined()
+    expect(jobs.find(j => j.id === 'cleanup')?.schedule).toBe('0 3 * * *')
+
+    await worker.shutdown()
+
+    // After shutdown, accessors throw
+    expect(() => getLayer('testStore')).toThrow('Layers not available')
+    expect(() => getHooks()).toThrow('Hook system not available')
+  })
+
+  it('works with no tools and no layers', async () => {
+    const config = defineApp({
+      brand: { name: 'Empty Worker' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const worker = createWorker({ config, tools: [] })
+    await worker.start()
+
+    const jobs = worker.getJobs()
+    expect(jobs).toHaveLength(0)
+
+    await worker.shutdown()
   })
 })

@@ -1,0 +1,25 @@
+{
+  "name": "@ydtb/anvil-layer-sentry",
+  "version": "0.0.1",
+  "description": "Error reporting layer for Anvil — Sentry integration with request context",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./noop": "./src/noop.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ydtb/anvil": "workspace:*",
+    "@ydtb/anvil-server": "workspace:*",
+    "effect": "^3.14.0",
+    "@sentry/node": "^9.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  }
+}

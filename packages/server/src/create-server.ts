@@ -1,5 +1,5 @@
 /**
- * createServer — the entry point for an Anvil server.
+ * createServer — the HTTP entry point for an Anvil server.
  *
  * Boots layers, creates a Hono app, processes tool and extension surfaces,
  * mounts routes, and starts listening.
@@ -19,18 +19,14 @@
  */
 
 import { Hono } from 'hono'
-import type { Hono as HonoType } from 'hono'
-import { HookSystem } from '@ydtb/anvil-hooks'
 import type { AppConfig } from '@ydtb/anvil'
 import type { MiddlewareHandler } from 'hono'
-import { requestContext, createConsoleLogger, getLogger, provideLoggingLayerResolver } from './request-context.ts'
+import { requestContext, getLogger, getRequestContext } from './request-context.ts'
 import type { RequestContext } from './request-context.ts'
-import { getLayer } from './accessors.ts'
-import { provideHookSystem, provideContributions } from './accessors.ts'
-import { bootLifecycle } from './lifecycle.ts'
-import type { LifecycleManager } from './lifecycle.ts'
-import { processSurfaces } from './surfaces.ts'
+import { boot } from './boot.ts'
+import type { BootResult } from './boot.ts'
 import type { ToolEntry } from './surfaces.ts'
+import { getLayer } from './accessors.ts'
 
 // ---------------------------------------------------------------------------
 // Config
@@ -72,7 +68,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   } = serverConfig
 
   const app = new Hono()
-  let lifecycle: LifecycleManager | null = null
+  let bootResult: BootResult | null = null
 
   // -----------------------------------------------------------------------
   // Middleware: request context
@@ -91,6 +87,51 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   })
 
   // -----------------------------------------------------------------------
+  // Global error handler (catches unhandled errors, reports to ErrorLayer)
+  // -----------------------------------------------------------------------
+
+  app.onError((error, c) => {
+    const logger = getLogger()
+    const ctx = getRequestContext()
+    const err = error instanceof Error ? error : new Error(String(error))
+
+    logger.error(
+      {
+        err: { message: err.message, stack: err.stack },
+        requestId: ctx?.requestId,
+        path: c.req.path,
+        method: c.req.method,
+      },
+      'Unhandled error in route handler'
+    )
+
+    // Report to error layer if available
+    try {
+      const errorLayer = (getLayer as (key: string) => unknown)('errors')
+      if (errorLayer && typeof (errorLayer as Record<string, unknown>).capture === 'function') {
+        (errorLayer as { capture: (error: Error, context?: Record<string, unknown>) => void }).capture(err, {
+          requestId: ctx?.requestId,
+          userId: ctx?.userId,
+          scopeId: ctx?.scopeId,
+          path: c.req.path,
+          method: c.req.method,
+        })
+      }
+    } catch {
+      // Error layer not available — already logged above
+    }
+
+    const status = (err as { status?: number }).status ?? 500
+    return c.json(
+      {
+        error: status >= 500 ? 'Internal server error' : err.message,
+        requestId: ctx?.requestId,
+      },
+      status as any,
+    )
+  })
+
+  // -----------------------------------------------------------------------
   // Middleware: user-provided
   // -----------------------------------------------------------------------
 
@@ -105,11 +146,11 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   app.get('/healthz', (c) => c.json({ status: 'ok' }))
 
   app.get('/readyz', async (c) => {
-    if (!lifecycle) {
+    if (!bootResult) {
       return c.json({ status: 'error', message: 'Server not started' }, 503)
     }
 
-    const results = await lifecycle.checkHealth()
+    const results = await bootResult.lifecycle.checkHealth()
     const allOk = Object.values(results).every((r) => r.status === 'ok')
 
     return c.json(
@@ -126,44 +167,13 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   // -----------------------------------------------------------------------
 
   async function start(): Promise<void> {
+    // Shared boot: layers, hooks, surfaces
+    bootResult = await boot({ config, tools, label: 'server' })
+
     const logger = getLogger()
 
-    // 1. Boot layers
-    logger.info({}, 'Starting Anvil server')
-    lifecycle = await bootLifecycle(config.layers)
-
-    // 1b. Wire logging layer into getLogger() if available
-    provideLoggingLayerResolver(() => {
-      try {
-        // 'logging' may or may not exist in LayerMap depending on installed packages
-        const layer = (getLayer as (key: string) => unknown)('logging')
-        if (layer && typeof (layer as Record<string, unknown>).logger === 'object') {
-          return layer as { logger: import('@ydtb/anvil').Logger }
-        }
-        return null
-      } catch {
-        return null
-      }
-    })
-
-    // 2. Create hook system
-    const hooks = new HookSystem()
-    provideHookSystem(hooks)
-
-    // 3. Process tool and extension surfaces
-    const extensions = config.extensions ?? []
-    const processed = processSurfaces(hooks, tools, extensions)
-
-    // 3b. Make extension contributions available via getContributions()
-    provideContributions(processed.contributions)
-    for (const [extId, items] of Object.entries(processed.contributions)) {
-      if (items.length > 0) {
-        logger.info({ extensionId: extId, count: items.length }, 'Collected extension contributions')
-      }
-    }
-
-    // 4. Mount tool and extension routers
-    for (const [id, router] of Object.entries(processed.routers)) {
+    // Mount tool and extension routers
+    for (const [id, router] of Object.entries(bootResult.processed.routers)) {
       if (router instanceof Hono) {
         app.route(`/api/${id}`, router)
         logger.info({ id, path: `/api/${id}` }, 'Mounted router')
@@ -175,7 +185,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
       }
     }
 
-    // 5. Mount app-level routes
+    // Mount app-level routes
     for (const [id, router] of Object.entries(routes)) {
       if (router instanceof Hono) {
         app.route(`/api/${id}`, router)
@@ -188,7 +198,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
       }
     }
 
-    // 6. Install shutdown hooks (Node/Bun environments only)
+    // Install shutdown hooks (Node/Bun environments only)
     if (typeof globalThis.process !== 'undefined') {
       const shutdownHandler = async () => {
         logger.info({}, 'Shutdown signal received')
@@ -200,7 +210,6 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
       globalThis.process.on('SIGINT', shutdownHandler)
     }
 
-    // 7. Start listening
     logger.info({ port }, 'Anvil server listening')
   }
 
@@ -209,21 +218,10 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   // -----------------------------------------------------------------------
 
   async function shutdown(): Promise<void> {
-    const logger = getLogger()
-    logger.info({}, 'Shutting down Anvil server')
-
-    // Clean up accessors
-    provideHookSystem(null)
-    provideContributions(null)
-    provideLoggingLayerResolver(null)
-
-    // Shut down layers (releases resources in reverse order)
-    if (lifecycle) {
-      await lifecycle.shutdown()
-      lifecycle = null
+    if (bootResult) {
+      await bootResult.shutdown()
+      bootResult = null
     }
-
-    logger.info({}, 'Anvil server shut down')
   }
 
   return { app, start, shutdown }
