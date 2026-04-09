@@ -26,6 +26,26 @@
 import type { AuthPlugin } from './index.ts'
 
 /**
+ * Wrap a raw better-auth plugin for use with the Anvil auth layer.
+ *
+ * Use this when you have a custom better-auth plugin (e.g., YDTB's scope
+ * plugin) and want to pass it to betterAuth({ plugins: [...] }).
+ *
+ * @example
+ * ```ts
+ * import { wrapPlugin } from '@ydtb/anvil-layer-auth/plugins'
+ * import { myScopePlugin } from './my-scope-plugin'
+ *
+ * betterAuth({
+ *   plugins: [wrapPlugin('scope', myScopePlugin)],
+ * })
+ * ```
+ */
+export function wrapPlugin(id: string, plugin: unknown): AuthPlugin {
+  return { id, plugin }
+}
+
+/**
  * API Key authentication plugin.
  * Allows machine-to-machine auth via API keys.
  */
