@@ -19,6 +19,21 @@
  */
 
 import { Hono } from 'hono'
+
+/**
+ * Duck-type check for Hono app instances.
+ * instanceof fails across package boundaries with bun link/symlinks.
+ */
+function isHonoApp(obj: unknown): obj is Hono {
+  return (
+    obj !== null &&
+    typeof obj === 'object' &&
+    typeof (obj as Record<string, unknown>).fetch === 'function' &&
+    typeof (obj as Record<string, unknown>).route === 'function' &&
+    typeof (obj as Record<string, unknown>).use === 'function' &&
+    typeof (obj as Record<string, unknown>).get === 'function'
+  )
+}
 import type { AppConfig } from '@ydtb/anvil'
 import type { MiddlewareHandler } from 'hono'
 import { requestContext, getLogger, getRequestContext } from './request-context.ts'
@@ -174,7 +189,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
 
     // Mount tool and extension routers
     for (const [id, router] of Object.entries(bootResult.processed.routers)) {
-      if (router instanceof Hono) {
+      if (isHonoApp(router)) {
         app.route(`/api/${id}`, router)
         logger.info({ id, path: `/api/${id}` }, 'Mounted router')
       } else {
@@ -187,7 +202,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
 
     // Mount app-level routes
     for (const [id, router] of Object.entries(routes)) {
-      if (router instanceof Hono) {
+      if (isHonoApp(router)) {
         app.route(`/api/${id}`, router)
         logger.info({ id, path: `/api/${id}` }, 'Mounted app-level route')
       } else {
