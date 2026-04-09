@@ -1,8 +1,8 @@
 /**
  * Dev middleware — embeds Vite inside the Hono server for single-process development.
  *
- * One server, one port. Vite runs in middleware mode — HMR, React Fast Refresh,
- * and asset serving all happen through the same Hono app that serves API routes.
+ * One server, one port. Vite runs on an internal Node.js http server,
+ * and the Hono middleware proxies non-API requests to it.
  *
  * @example
  * ```ts
@@ -23,9 +23,7 @@
  */
 
 import type { MiddlewareHandler } from 'hono'
-import type { ViteDevServer } from 'vite'
-import { Readable, Writable } from 'node:stream'
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import http from 'node:http'
 
 export interface DevMiddlewareConfig {
   /** Project root directory (default: process.cwd()) */
@@ -37,10 +35,12 @@ export interface DevMiddlewareConfig {
 }
 
 /**
- * Create Hono middleware that embeds Vite in middleware mode.
+ * Create Hono middleware that embeds Vite for development.
  *
- * Pipes requests through Vite's connect middleware stack using
- * Node.js IncomingMessage/ServerResponse streams for full compatibility.
+ * Internally creates a Node.js http server with Vite's connect middleware
+ * (which requires real Node req/res objects). Non-API requests from Hono
+ * are proxied to this internal server via fetch. The internal server
+ * listens on a random port — it's not exposed externally.
  */
 export async function createDevMiddleware(
   config?: DevMiddlewareConfig,
@@ -52,6 +52,8 @@ export async function createDevMiddleware(
   } = config ?? {}
 
   const { createServer: createViteServer } = await import('vite')
+  const fs = await import('fs')
+  const path = await import('path')
 
   const vite = await createViteServer({
     root,
@@ -60,6 +62,45 @@ export async function createDevMiddleware(
     appType: 'custom',
     ...viteOptions,
   })
+
+  // Create an internal Node.js http server with Vite's connect middleware.
+  // This gives Vite the real Node IncomingMessage/ServerResponse it needs.
+  const indexHtmlPath = path.join(root, 'index.html')
+
+  const internalServer = http.createServer((req, res) => {
+    vite.middlewares(req, res, async () => {
+      // Vite didn't handle it — serve transformed index.html as SPA fallback
+      const url = req.url ?? '/'
+      const ext = path.extname(url.split('?')[0])
+
+      if (!ext || ext === '.html') {
+        try {
+          if (fs.existsSync(indexHtmlPath)) {
+            const rawHtml = fs.readFileSync(indexHtmlPath, 'utf-8')
+            const html = await vite.transformIndexHtml(url, rawHtml)
+            res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+            res.end(html)
+            return
+          }
+        } catch (e) {
+          console.error('[dev-middleware] Index HTML error:', e)
+        }
+      }
+
+      res.writeHead(404)
+      res.end('Not found')
+    })
+  })
+
+  // Listen on a random port (internal only — not exposed externally)
+  const internalPort = await new Promise<number>((resolve) => {
+    internalServer.listen(0, '127.0.0.1', () => {
+      const addr = internalServer.address()
+      resolve(typeof addr === 'object' && addr ? addr.port : 0)
+    })
+  })
+
+  console.log(`[dev-middleware] Vite internal server on port ${internalPort}`)
 
   return async (c, next) => {
     const url = new URL(c.req.url)
@@ -70,116 +111,22 @@ export async function createDevMiddleware(
       return next()
     }
 
-    // Pipe through Vite's connect middleware
-    const result = await runViteMiddleware(vite, c.req.raw, pathname + url.search)
+    // Proxy to the internal Vite server
+    try {
+      const proxyUrl = `http://127.0.0.1:${internalPort}${pathname}${url.search}`
+      const proxyRes = await fetch(proxyUrl, {
+        method: c.req.method,
+        headers: c.req.raw.headers,
+      })
 
-    if (result) {
-      return result
+      // Forward the response
+      return new Response(proxyRes.body, {
+        status: proxyRes.status,
+        headers: proxyRes.headers,
+      })
+    } catch (e) {
+      console.error('[dev-middleware] Proxy error:', e)
+      return next()
     }
-
-    // Vite didn't handle it — serve transformed index.html as SPA fallback
-    if (!pathname.includes('.') || pathname === '/') {
-      try {
-        const fs = await import('fs')
-        const path = await import('path')
-        const indexPath = path.join(root, 'index.html')
-        if (fs.existsSync(indexPath)) {
-          const rawHtml = fs.readFileSync(indexPath, 'utf-8')
-          const html = await vite.transformIndexHtml(pathname, rawHtml)
-          return new Response(html, {
-            status: 200,
-            headers: { 'content-type': 'text/html; charset=utf-8' },
-          })
-        }
-      } catch (e) {
-        console.error('[dev-middleware] Index HTML error:', e)
-      }
-    }
-
-    return next()
   }
-}
-
-/**
- * Run a request through Vite's connect middleware stack.
- *
- * Creates Node.js IncomingMessage/ServerResponse wrappers from the
- * Web Standard Request, pipes through Vite, and returns a Web Response.
- */
-function runViteMiddleware(
-  vite: ViteDevServer,
-  request: Request,
-  url: string,
-): Promise<Response | null> {
-  return new Promise((resolve) => {
-    // Build a Node IncomingMessage-like object
-    const body = request.body ? Readable.fromWeb(request.body as any) : Readable.from([])
-    const req = Object.assign(body, {
-      url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      // Properties Vite's middleware checks
-      originalUrl: url,
-      socket: { remoteAddress: '127.0.0.1', encrypted: false },
-    }) as unknown as IncomingMessage
-
-    // Build a ServerResponse-like writable
-    const chunks: Buffer[] = []
-    let statusCode = 200
-    const responseHeaders: Record<string, string | string[]> = {}
-    let headersSent = false
-
-    const res = Object.assign(new Writable({
-      write(chunk: Buffer, _encoding: string, callback: () => void) {
-        chunks.push(chunk)
-        callback()
-      },
-    }), {
-      statusCode,
-      get headersSent() { return headersSent },
-      setHeader(key: string, value: string | string[]) {
-        responseHeaders[key.toLowerCase()] = value
-      },
-      getHeader(key: string) {
-        return responseHeaders[key.toLowerCase()]
-      },
-      removeHeader(key: string) {
-        delete responseHeaders[key.toLowerCase()]
-      },
-      writeHead(status: number, headers?: Record<string, string | string[]>) {
-        statusCode = status
-        headersSent = true
-        if (headers) {
-          for (const [k, v] of Object.entries(headers)) {
-            responseHeaders[k.toLowerCase()] = v
-          }
-        }
-        return res
-      },
-      end(chunk?: Buffer | string) {
-        if (chunk) {
-          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
-        }
-        headersSent = true
-
-        // Build response
-        const body = Buffer.concat(chunks)
-        const flatHeaders: Record<string, string> = {}
-        for (const [k, v] of Object.entries(responseHeaders)) {
-          flatHeaders[k] = Array.isArray(v) ? v.join(', ') : String(v)
-        }
-
-        resolve(new Response(body, {
-          status: statusCode,
-          headers: flatHeaders,
-        }))
-      },
-    }) as unknown as ServerResponse
-
-    // Run through Vite's connect middleware stack
-    vite.middlewares(req, res, () => {
-      // Vite didn't handle it — return null to let Hono take over
-      resolve(null)
-    })
-  })
 }
