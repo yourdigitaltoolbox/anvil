@@ -16,7 +16,7 @@ import { Effect, Layer } from 'effect'
 import { Hono } from 'hono'
 import { defineApp, defineServer, defineExtension, scope } from '@ydtb/anvil'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc, getLayerTag, createLayerConfig } from '../index.ts'
+import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc, getLayerTag, createLayerConfig, withCache, cacheMiddleware, invalidateCache } from '../index.ts'
 import type { RouteMatch, RegisteredRoute } from '../index.ts'
 import { provideLayerResolver, provideHookSystem, provideContributions } from '../accessors.ts'
 
@@ -664,5 +664,151 @@ describe('SPA handler', () => {
     expect(res.headers.get('x-custom')).toBe('yes')
     const text = await res.text()
     expect(text).toContain('Custom: system')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Cache helper tests
+// ---------------------------------------------------------------------------
+
+describe('cache helpers', () => {
+  it('withCache returns computed value when no cache layer', async () => {
+    const config = defineApp({
+      brand: { name: 'No Cache' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({ config, tools: [] })
+    await server.start()
+
+    // No cache layer — withCache should still work
+    let computeCount = 0
+    const result = await withCache({ key: 'test', ttl: 30 }, async () => {
+      computeCount++
+      return { data: 'hello' }
+    })
+
+    expect(result).toEqual({ data: 'hello' })
+    expect(computeCount).toBe(1)
+
+    await server.shutdown()
+  })
+
+  it('withCache caches and returns cached value', async () => {
+    const { memory } = await import('@ydtb/anvil-layer-redis/memory')
+
+    const config = defineApp({
+      brand: { name: 'Cache Test' },
+      layers: {
+        cache: memory(),
+      } as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({ config, tools: [] })
+    await server.start()
+
+    let computeCount = 0
+    const compute = async () => {
+      computeCount++
+      return { data: 'expensive', count: computeCount }
+    }
+
+    // First call — computes
+    const result1 = await withCache({ key: 'test:expensive', ttl: 30 }, compute)
+    expect(result1.data).toBe('expensive')
+    expect(computeCount).toBe(1)
+
+    // Wait a moment for async cache write
+    await new Promise(r => setTimeout(r, 50))
+
+    // Second call — should return cached
+    const result2 = await withCache({ key: 'test:expensive', ttl: 30 }, compute)
+    expect(result2.data).toBe('expensive')
+    expect(result2.count).toBe(1)  // Same as first — was cached
+    expect(computeCount).toBe(1)   // compute wasn't called again
+
+    await server.shutdown()
+  })
+
+  it('invalidateCache removes cached entries', async () => {
+    const { memory } = await import('@ydtb/anvil-layer-redis/memory')
+
+    const config = defineApp({
+      brand: { name: 'Invalidate Test' },
+      layers: {
+        cache: memory(),
+      } as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({ config, tools: [] })
+    await server.start()
+
+    let computeCount = 0
+
+    // First call
+    await withCache({ key: 'test:inval', ttl: 30 }, async () => {
+      computeCount++
+      return { v: computeCount }
+    })
+    await new Promise(r => setTimeout(r, 50))
+
+    // Invalidate
+    await invalidateCache('test:inval')
+
+    // Next call should recompute
+    const result = await withCache({ key: 'test:inval', ttl: 30 }, async () => {
+      computeCount++
+      return { v: computeCount }
+    })
+    expect(result.v).toBe(2)
+    expect(computeCount).toBe(2)
+
+    await server.shutdown()
+  })
+
+  it('cacheMiddleware caches GET responses', async () => {
+    const { memory } = await import('@ydtb/anvil-layer-redis/memory')
+
+    let handlerCallCount = 0
+
+    const config = defineApp({
+      brand: { name: 'Middleware Cache' },
+      layers: {
+        cache: memory(),
+      } as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({ config, tools: [] })
+
+    server.app.get('/api/cached', cacheMiddleware({ ttl: 30 }), (c) => {
+      handlerCallCount++
+      return c.json({ count: handlerCallCount })
+    })
+
+    await server.start()
+
+    // First request — handler runs
+    const res1 = await server.app.request('/api/cached')
+    expect(res1.status).toBe(200)
+    const body1 = await res1.json() as any
+    expect(body1.count).toBe(1)
+
+    // Wait for cache write
+    await new Promise(r => setTimeout(r, 50))
+
+    // Second request — should be cached
+    const res2 = await server.app.request('/api/cached')
+    expect(res2.status).toBe(200)
+    const body2 = await res2.json() as any
+    expect(body2.count).toBe(1)  // Same as first — cached
+    expect(res2.headers.get('x-cache')).toBe('HIT')
+
+    expect(handlerCallCount).toBe(1)  // Handler only called once
+
+    await server.shutdown()
   })
 })

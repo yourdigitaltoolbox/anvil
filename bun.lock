@@ -207,6 +207,7 @@
       },
       "devDependencies": {
         "@types/node": "^25.5.2",
+        "@ydtb/anvil-layer-redis": "workspace:*",
         "typescript": "^5.8.0",
         "vitest": "^4.1.0",
       },

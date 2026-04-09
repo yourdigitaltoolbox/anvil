@@ -119,7 +119,7 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 - API doesn't change — internal resolution only
 - Not blocking — `provideLayerResolver` test helper works
 
-### D4: ⬜ Cache helpers
+### D4: ✅ Cache helpers
 - SPA shell caching (check cache before calling renderShell)
 - Loader data caching (cache by route + params)
 - API response caching middleware

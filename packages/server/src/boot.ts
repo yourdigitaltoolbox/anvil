@@ -17,6 +17,7 @@ import { getLayer } from './accessors.ts'
 import { provideHookSystem, provideContributions } from './accessors.ts'
 import { provideLoggingLayerResolver } from './request-context.ts'
 import { getLogger } from './request-context.ts'
+import { provideCacheResolver } from './cache-helpers.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
 import { processSurfaces } from './surfaces.ts'
@@ -74,6 +75,9 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
     }
   })
 
+  // 2b. Wire cache resolver for cache helpers
+  provideCacheResolver((key: string) => (getLayer as (key: string) => unknown)(key))
+
   // 3. Create hook system
   const hooks = new HookSystem()
   provideHookSystem(hooks)
@@ -98,6 +102,7 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
     provideHookSystem(null)
     provideContributions(null)
     provideLoggingLayerResolver(null)
+    provideCacheResolver(null)
 
     await lifecycle.shutdown()
 
