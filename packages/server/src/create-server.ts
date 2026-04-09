@@ -40,7 +40,8 @@ import { requestContext, getLogger, getRequestContext } from './request-context.
 import type { RequestContext } from './request-context.ts'
 import { boot } from './boot.ts'
 import type { BootResult } from './boot.ts'
-import type { ToolEntry } from './surfaces.ts'
+// ToolEntry type is toolkit-specific — kept for backwards compat during transition
+// import type { ToolEntry } from './surfaces.ts'
 import { getLayer } from './accessors.ts'
 
 // ---------------------------------------------------------------------------
@@ -60,8 +61,19 @@ export type MiddlewareEntry =
 export interface ServerConfig {
   /** The app composition config from defineApp() */
   config: AppConfig
-  /** Tool entries — typically from virtual:app/server-tools */
-  tools: ToolEntry[]
+  /**
+   * Modules to process — shape depends on toolkit.
+   * For @ydtb/anvil-toolkit, these are ToolEntry[].
+   * For a custom toolkit, these could be any shape.
+   */
+  modules?: unknown[]
+  /** @deprecated Use `modules` instead. Alias for backwards compatibility. */
+  tools?: unknown[]
+  /**
+   * Surface processor — toolkit provides this to process module surfaces.
+   * Called during boot to register hooks, extract routers, collect contributions.
+   */
+  processSurfaces?: (hooks: import('@ydtb/anvil-hooks').HookSystem, modules: unknown[], extensions: import('@ydtb/anvil').Extension[]) => import('./boot.ts').ProcessedResult
   /**
    * Hono middleware to run on every request.
    *
@@ -99,11 +111,16 @@ export interface AnvilServer {
 export function createServer(serverConfig: ServerConfig): AnvilServer {
   const {
     config,
-    tools,
+    modules: modulesOpt,
+    tools: toolsOpt,
+    processSurfaces,
     middleware = [],
     routes = {},
     port = 3000,
   } = serverConfig
+
+  // Support both `modules` and `tools` (backwards compat)
+  const modules = modulesOpt ?? toolsOpt ?? []
 
   const app = new Hono()
   let bootResult: BootResult | null = null
@@ -225,7 +242,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
 
   async function start(): Promise<void> {
     // Shared boot: layers, hooks, surfaces
-    bootResult = await boot({ config, tools, label: 'server' })
+    bootResult = await boot({ config, modules, label: 'server', processSurfaces })
 
     const logger = getLogger()
 

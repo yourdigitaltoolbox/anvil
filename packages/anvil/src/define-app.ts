@@ -1,12 +1,11 @@
 /**
  * Composition root — the single source of truth for an Anvil application.
  *
- * `defineApp` declares everything: brand identity, infrastructure layers,
- * the scope tree with tool includes, and extensions. This is the one file
- * that tells you what the entire application is made of.
+ * `defineApp` declares the brand, infrastructure layers, and extensions.
+ * Toolkits augment `AppConfig` with additional fields (e.g., scopes, modules)
+ * via TypeScript declaration merging.
  */
 
-import type { ScopeTree } from './scope.ts'
 import type { RequiredLayers } from './layers.ts'
 import type { Extension } from './extension.ts'
 
@@ -24,48 +23,50 @@ export interface BrandConfig {
 }
 
 // ---------------------------------------------------------------------------
-// App Config
+// App Config — extensible via declaration merging
 // ---------------------------------------------------------------------------
 
+/**
+ * Application configuration. Framework provides the base fields.
+ * Toolkits augment with additional fields via declaration merging:
+ *
+ * ```ts
+ * // In @ydtb/anvil-toolkit:
+ * declare module '@ydtb/anvil' {
+ *   interface AppConfig {
+ *     scopes?: ScopeTree
+ *   }
+ * }
+ * ```
+ */
 export interface AppConfig {
   /** Brand identity */
   brand: BrandConfig
   /** Infrastructure layers — requires all keys declared by installed layer packages */
   layers: RequiredLayers
-  /** Scope hierarchy — nested tree with per-level tool includes */
-  scopes: ScopeTree
   /** Extensions — app-level systems that define contracts for tools to contribute to */
   extensions?: Extension[]
+  /** Toolkit-specific fields added via declaration merging */
+  [key: string]: unknown
 }
 
 /**
  * Define an Anvil application.
  *
  * The composition root is the single source of truth. It declares the brand,
- * wires infrastructure layers, defines the scope hierarchy with tool includes,
- * and registers extensions.
- *
- * All layer keys declared by installed layer packages are required — omit one
- * and TypeScript errors at compile time.
+ * wires infrastructure layers, and registers extensions. Toolkits add
+ * additional fields (scopes, modules, etc.) via declaration merging.
  *
  * @example
  * ```ts
- * import { defineApp, scope } from '@ydtb/anvil'
+ * import { defineApp } from '@ydtb/anvil'
  * import { postgres } from '@ydtb/anvil-layer-postgres'
- * import { redis } from '@ydtb/anvil-layer-redis'
- * import { onboarding } from '@ydtb/ext-onboarding'
- * import { search } from '@ydtb/ext-search'
  *
  * export default defineApp({
  *   brand: { name: 'My App' },
  *   layers: {
  *     database: postgres({ url: env.DATABASE_URL }),
- *     cache: redis({ url: env.REDIS_URL }),
  *   },
- *   scopes: scope({
- *     type: 'system', label: 'System', urlPrefix: '/s',
- *     includes: [contacts, billing],
- *   }),
  *   extensions: [onboarding, search],
  * })
  * ```

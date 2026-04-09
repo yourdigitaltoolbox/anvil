@@ -29,7 +29,7 @@ export function collectTools(config: AppConfig): ToolDescriptor[] {
     }
   }
 
-  walk(config.scopes)
+  walk(config.scopes as ScopeDefinition)
   return [...seen.values()]
 }
 
@@ -60,6 +60,6 @@ export function collectToolsWithScopes(
     }
   }
 
-  walk(config.scopes)
+  walk(config.scopes as ScopeDefinition)
   return [...toolScopes.values()]
 }

@@ -1,57 +1,39 @@
 /**
  * Anvil virtual module plugin for Vite/Rollup.
  *
- * Reads compose.config.ts and generates virtual modules that wire tools,
- * schemas, permissions, and scope tree into the build without manual imports.
- *
- * Works with both Vite (client) and Rollup (server) builds — uses only
- * standard resolveId + load hooks.
+ * The plugin provides the resolveId/load mechanics for virtual modules.
+ * Which modules are generated is configurable — toolkits pass their own
+ * module generators via the `modules` option.
  *
  * @example
  * ```ts
- * // vite.config.ts
+ * // With toolkit-provided modules:
  * import { anvilPlugin } from '@ydtb/anvil-build/plugin'
- * import config from './compose.config'
+ * import { toolkitModules } from '@ydtb/anvil-toolkit'
+ *
+ * export default defineConfig({
+ *   plugins: [anvilPlugin(config, { modules: toolkitModules(config) })],
+ * })
+ * ```
+ *
+ * ```ts
+ * // With built-in generators (backwards compat during transition):
+ * import { anvilPlugin } from '@ydtb/anvil-build/plugin'
  *
  * export default defineConfig({
  *   plugins: [anvilPlugin(config)],
  * })
  * ```
- *
- * Then in your code:
- * ```ts
- * import { tools } from 'virtual:anvil/server-tools'
- * import { schema } from 'virtual:anvil/schema'
- * import { scopeTree } from 'virtual:anvil/scope-tree'
- * ```
  */
 
 import type { AppConfig } from '@ydtb/anvil'
-import {
-  generateServerToolsModule,
-  generateClientToolsModule,
-  generateSchemaModule,
-  generateScopeTreeModule,
-  generatePermissionsModule,
-  generateExtensionsModule,
-} from './generators.ts'
 
 // ---------------------------------------------------------------------------
-// Virtual module IDs
+// Types
 // ---------------------------------------------------------------------------
 
-const VIRTUAL_PREFIX = 'virtual:anvil/'
-
-const VIRTUAL_MODULES = {
-  'virtual:anvil/server-tools': generateServerToolsModule,
-  'virtual:anvil/client-tools': generateClientToolsModule,
-  'virtual:anvil/schema': generateSchemaModule,
-  'virtual:anvil/scope-tree': generateScopeTreeModule,
-  'virtual:anvil/permissions': generatePermissionsModule,
-  'virtual:anvil/extensions': generateExtensionsModule,
-} as const
-
-type VirtualModuleId = keyof typeof VIRTUAL_MODULES
+/** A virtual module generator — takes config, returns ESM source code */
+export type VirtualModuleGenerator = (config: AppConfig) => string
 
 const RESOLVED_PREFIX = '\0'
 
@@ -62,31 +44,71 @@ const RESOLVED_PREFIX = '\0'
 export interface AnvilPluginOptions {
   /** Enable debug logging of generated module contents */
   debug?: boolean
+  /**
+   * Virtual module generators. Map of module ID → generator function.
+   * Toolkit packages provide these.
+   *
+   * @example
+   * ```ts
+   * modules: {
+   *   'virtual:anvil/server-tools': (config) => `export const tools = [...]`,
+   *   'virtual:anvil/schema': (config) => `export const schema = {...}`,
+   * }
+   * ```
+   */
+  modules?: Record<string, VirtualModuleGenerator>
 }
 
 /**
  * Create the Anvil virtual module plugin.
  *
+ * The plugin resolves `virtual:anvil/*` imports and returns generated
+ * ESM source code. Which modules are available depends on the `modules`
+ * option — toolkits provide their own generators.
+ *
  * @param config - The AppConfig from compose.config.ts
- * @param options - Plugin options
+ * @param options - Plugin options including virtual module generators
  * @returns A Vite/Rollup plugin
  */
 export function anvilPlugin(config: AppConfig, options: AnvilPluginOptions = {}) {
-  const { debug = false } = options
+  const { debug = false, modules = {} } = options
 
-  // Pre-compute — config is static for the lifetime of the build/dev server
+  // Try to load built-in generators as fallback (backwards compat)
+  let allModules: Record<string, VirtualModuleGenerator> = { ...modules }
+
+  if (Object.keys(allModules).length === 0) {
+    // No modules provided — try loading built-in generators
+    // These will be removed when toolkit code is extracted (Phase 3)
+    try {
+      const generators = require('./generators.ts')
+      allModules = {
+        'virtual:anvil/server-tools': generators.generateServerToolsModule,
+        'virtual:anvil/client-tools': generators.generateClientToolsModule,
+        'virtual:anvil/schema': generators.generateSchemaModule,
+        'virtual:anvil/scope-tree': generators.generateScopeTreeModule,
+        'virtual:anvil/permissions': generators.generatePermissionsModule,
+        'virtual:anvil/extensions': generators.generateExtensionsModule,
+      }
+    } catch {
+      // Generators not available — that's fine if toolkit provides modules
+    }
+  }
+
+  // Pre-compute cache
   const moduleCache = new Map<string, string>()
 
-  function getModuleSource(id: VirtualModuleId): string {
+  function getModuleSource(id: string): string | undefined {
     let source = moduleCache.get(id)
-    if (!source) {
-      const generator = VIRTUAL_MODULES[id]
-      source = generator(config)
-      moduleCache.set(id, source)
+    if (source !== undefined) return source
 
-      if (debug) {
-        console.log(`[anvil-build] Generated ${id}:\n${source}\n`)
-      }
+    const generator = allModules[id]
+    if (!generator) return undefined
+
+    source = generator(config)
+    moduleCache.set(id, source)
+
+    if (debug) {
+      console.log(`[anvil-build] Generated ${id}:\n${source}\n`)
     }
     return source
   }
@@ -95,7 +117,7 @@ export function anvilPlugin(config: AppConfig, options: AnvilPluginOptions = {})
     name: 'anvil:virtual-modules',
 
     resolveId(id: string) {
-      if (id in VIRTUAL_MODULES) {
+      if (id in allModules) {
         return RESOLVED_PREFIX + id
       }
       return undefined
@@ -103,10 +125,8 @@ export function anvilPlugin(config: AppConfig, options: AnvilPluginOptions = {})
 
     load(id: string) {
       if (id.startsWith(RESOLVED_PREFIX)) {
-        const virtualId = id.slice(RESOLVED_PREFIX.length) as VirtualModuleId
-        if (virtualId in VIRTUAL_MODULES) {
-          return getModuleSource(virtualId)
-        }
+        const virtualId = id.slice(RESOLVED_PREFIX.length)
+        return getModuleSource(virtualId)
       }
       return undefined
     },

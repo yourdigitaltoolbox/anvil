@@ -27,8 +27,6 @@ import type { AppConfig, JobDefinition } from '@ydtb/anvil'
 import { getLogger } from './request-context.ts'
 import { boot } from './boot.ts'
 import type { BootResult } from './boot.ts'
-import type { ToolEntry } from './surfaces.ts'
-
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
@@ -36,8 +34,12 @@ import type { ToolEntry } from './surfaces.ts'
 export interface WorkerConfig {
   /** The app composition config from defineApp() */
   config: AppConfig
-  /** Tool entries — typically from virtual:app/server-tools */
-  tools: ToolEntry[]
+  /** Modules to process — shape depends on toolkit */
+  modules?: unknown[]
+  /** @deprecated Use `modules` instead */
+  tools?: unknown[]
+  /** Surface processor — toolkit provides this */
+  processSurfaces?: (hooks: import('@ydtb/anvil-hooks').HookSystem, modules: unknown[], extensions: import('@ydtb/anvil').Extension[]) => import('./boot.ts').ProcessedResult
   /**
    * Custom job handler — called for each job that needs processing.
    * If not provided, the worker collects jobs but relies on the job layer
@@ -60,14 +62,15 @@ export interface AnvilWorker {
 // ---------------------------------------------------------------------------
 
 export function createWorker(workerConfig: WorkerConfig): AnvilWorker {
-  const { config, tools, onJob } = workerConfig
+  const { config, modules: modulesOpt, tools: toolsOpt, processSurfaces, onJob } = workerConfig
+  const modules = modulesOpt ?? toolsOpt ?? []
 
   let bootResult: BootResult | null = null
   let collectedJobs: JobDefinition[] = []
 
   async function start(): Promise<void> {
     // Shared boot: layers, hooks, surfaces
-    bootResult = await boot({ config, tools, label: 'worker' })
+    bootResult = await boot({ config, modules, label: 'worker', processSurfaces })
 
     const logger = getLogger()
 

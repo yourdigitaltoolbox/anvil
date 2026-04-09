@@ -29,22 +29,37 @@
  */
 
 import type { Context as HonoContext } from 'hono'
-import type { RouteEntry } from '@ydtb/anvil'
 import { getLogger } from './request-context.ts'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Minimal route definition — what the SPA handler needs from a route.
+ * Toolkit-specific route types (RouteEntry) are narrower versions of this.
+ */
+export interface RouteDefinition {
+  /** Route path pattern */
+  path: string
+  /** Component (opaque to the server — used by the client) */
+  component?: unknown
+  /** Server-side loader for pre-fetching data */
+  loader?: (context: {
+    params: Record<string, string>
+    scopeChain?: Array<{ scope: string; scopeId: string }>
+  }) => Promise<unknown>
+}
+
 export interface RegisteredRoute {
   /** Full URL pattern (e.g., '/s/dashboard', '/c/:scopeId/contacts/:id') */
   pattern: string
-  /** The tool that owns this route */
+  /** The module/tool that owns this route */
   toolId: string
   /** The scope type this route belongs to (e.g., 'company') — null for non-scoped routes */
   scopeType: string | null
-  /** The original route entry from the tool's client surface */
-  route: RouteEntry
+  /** The original route definition */
+  route: RouteDefinition
 }
 
 export interface RouteMatch {

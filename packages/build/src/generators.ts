@@ -169,7 +169,7 @@ export function generateScopeTreeModule(config: AppConfig): string {
     }
   }
 
-  const tree = serializeScope(config.scopes)
+  const tree = serializeScope(config.scopes as import('@ydtb/anvil').ScopeDefinition)
   return `export const scopeTree = ${JSON.stringify(tree, null, 2)}`
 }
 

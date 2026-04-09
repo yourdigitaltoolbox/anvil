@@ -3,16 +3,16 @@
  *
  * Handles the common steps:
  * 1. Boot layers (Effect ManagedRuntime)
- * 2. Wire logging layer into getLogger()
+ * 2. Wire logging/cache resolvers
  * 3. Create hook system
- * 4. Process tool/extension surfaces (hooks, jobs, contributions)
+ * 4. Process module surfaces via pluggable processor (toolkit provides this)
  *
  * Returns everything both entry points need to continue with their
  * specific work (HTTP routing for server, job processing for worker).
  */
 
 import { HookSystem } from '@ydtb/anvil-hooks'
-import type { AppConfig } from '@ydtb/anvil'
+import type { AppConfig, Extension } from '@ydtb/anvil'
 import { getLayer } from './accessors.ts'
 import { provideHookSystem, provideContributions } from './accessors.ts'
 import { provideLoggingLayerResolver } from './request-context.ts'
@@ -20,12 +20,29 @@ import { getLogger } from './request-context.ts'
 import { provideCacheResolver } from './cache-helpers.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
-import { processSurfaces } from './surfaces.ts'
-import type { ToolEntry, ProcessedSurfaces } from './surfaces.ts'
+
+// Fallback import — used during transition, removed in Phase 3
+let _fallbackProcessSurfaces: ((hooks: HookSystem, modules: unknown[], extensions: Extension[]) => ProcessedResult) | null = null
+try {
+  const surfaces = require('./surfaces.ts')
+  _fallbackProcessSurfaces = surfaces.processSurfaces
+} catch {
+  // surfaces.ts not available — toolkit must provide processSurfaces
+}
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
+
+/** Result of processing module surfaces — generic, toolkit defines the shape */
+export interface ProcessedResult {
+  /** Map of module/extension ID → router (Hono sub-app) */
+  routers: Record<string, unknown>
+  /** Extension contributions collected from modules */
+  contributions: Record<string, unknown[]>
+  /** Collected schemas (for database migrations) */
+  schemas: Record<string, unknown>
+}
 
 export interface BootResult {
   /** Lifecycle manager for health checks and shutdown */
@@ -33,7 +50,7 @@ export interface BootResult {
   /** The hook system instance */
   hooks: HookSystem
   /** Processed surfaces — routers, contributions, schemas */
-  processed: ProcessedSurfaces
+  processed: ProcessedResult
   /** Clean up all accessors and shut down layers */
   shutdown: () => Promise<void>
 }
@@ -41,10 +58,15 @@ export interface BootResult {
 export interface BootConfig {
   /** The app composition config from defineApp() */
   config: AppConfig
-  /** Tool entries */
-  tools: ToolEntry[]
+  /** Modules to process — shape depends on toolkit (tools, plugins, etc.) */
+  modules?: unknown[]
   /** Label for logging (e.g., 'server', 'worker') */
   label: string
+  /**
+   * Surface processor — toolkit provides this to process its module surfaces.
+   * If not provided, falls back to the built-in processSurfaces (during transition).
+   */
+  processSurfaces?: (hooks: HookSystem, modules: unknown[], extensions: Extension[]) => ProcessedResult
 }
 
 // ---------------------------------------------------------------------------
@@ -55,7 +77,7 @@ export interface BootConfig {
  * Run the shared boot sequence. Used internally by createServer and createWorker.
  */
 export async function boot(bootConfig: BootConfig): Promise<BootResult> {
-  const { config, tools, label } = bootConfig
+  const { config, modules = [], label, processSurfaces } = bootConfig
   const logger = getLogger()
 
   // 1. Boot layers
@@ -82,9 +104,17 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
   const hooks = new HookSystem()
   provideHookSystem(hooks)
 
-  // 4. Process tool and extension surfaces
+  // 4. Process module surfaces
   const extensions = config.extensions ?? []
-  const processed = processSurfaces(hooks, tools, extensions)
+  const processor = processSurfaces ?? _fallbackProcessSurfaces
+
+  let processed: ProcessedResult
+  if (processor) {
+    processed = processor(hooks, modules, extensions)
+  } else {
+    // No surface processor available — return empty result
+    processed = { routers: {}, contributions: {}, schemas: {} }
+  }
 
   // 5. Make extension contributions available via getContributions()
   provideContributions(processed.contributions)
