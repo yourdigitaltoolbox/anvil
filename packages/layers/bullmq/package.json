@@ -1,0 +1,25 @@
+{
+  "name": "@ydtb/anvil-layer-bullmq",
+  "version": "0.0.1",
+  "description": "BullMQ job queue layer for Anvil — background job processing with Redis-backed queues",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./memory": "./src/memory.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ydtb/anvil": "workspace:*",
+    "@ydtb/anvil-server": "workspace:*",
+    "effect": "^3.14.0",
+    "bullmq": "^5.34.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  }
+}
