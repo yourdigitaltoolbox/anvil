@@ -1,0 +1,38 @@
+{
+  "name": "@ydtb/anvil-toolkit",
+  "version": "0.0.1",
+  "description": "YDTB toolkit for Anvil — tools, scopes, and surface definitions",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./build": "./src/build-modules.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ydtb/anvil": "workspace:*",
+    "@ydtb/anvil-server": "workspace:*",
+    "@ydtb/anvil-hooks": "workspace:*",
+    "@ydtb/anvil-client": "workspace:*"
+  },
+  "devDependencies": {
+    "react": "^19.0.0",
+    "hono": "^4.7.0",
+    "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "react-dom": "^19.2.5",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  },
+  "peerDependencies": {
+    "react": ""
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  }
+}
