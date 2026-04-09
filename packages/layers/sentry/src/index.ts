@@ -23,9 +23,9 @@
  */
 
 import * as Sentry from '@sentry/node'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -54,7 +54,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const ErrorTag = Context.GenericTag<ErrorLayer>('Errors')
+const ErrorTag = getLayerTag<ErrorLayer>('errors')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -129,7 +129,7 @@ export function sentry(config: SentryConfig): LayerConfig<'errors'> {
     ),
   )
 
-  return createLayerConfig('errors', ErrorTag, effectLayer, {
+  return createLayerConfig('errors', effectLayer, {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
   })
 }

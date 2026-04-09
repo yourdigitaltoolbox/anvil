@@ -16,11 +16,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { CacheLayer } from './index.ts'
-import { CacheTag } from './index.ts'
+
+const CacheTag = getLayerTag<CacheLayer>('cache')
 
 // ---------------------------------------------------------------------------
 // In-memory store with TTL
@@ -142,7 +143,7 @@ export function memory(config?: MemoryCacheConfig): LayerConfig<'cache'> {
     ).pipe(Effect.map(({ service }) => service)),
   )
 
-  return createLayerConfig('cache', CacheTag, effectLayer, {
+  return createLayerConfig('cache', effectLayer, {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
   })
 }

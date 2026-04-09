@@ -1,8 +1,8 @@
 /**
  * @ydtb/anvil-layer-auth — Authentication layer for Anvil.
  *
- * Wraps better-auth with Anvil's layer system. Provides session validation,
- * user management, and a pluggable auth plugin system.
+ * Wraps better-auth with Anvil's layer system. Depends on the database layer —
+ * shares the same connection pool instead of creating its own.
  *
  * @example
  * ```ts
@@ -11,6 +11,7 @@
  *
  * defineApp({
  *   layers: {
+ *     database: postgres({ url: env.DATABASE_URL }),
  *     auth: betterAuth({
  *       secret: env.AUTH_SECRET,
  *       baseURL: env.APP_URL,
@@ -20,16 +21,13 @@
  * })
  * ```
  *
- * Then in tool code:
- * ```ts
- * const auth = getLayer('auth')
- * const session = await auth.getSession(request)
- * ```
+ * The auth layer automatically uses the database layer's connection.
+ * Effect resolves the dependency — database boots first, auth gets it.
  */
 
 import { Context, Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -79,25 +77,17 @@ declare module '@ydtb/anvil' {
 }
 
 // ---------------------------------------------------------------------------
-// Effect tag
+// Effect tag (via shared registry — enables inter-layer dependencies)
 // ---------------------------------------------------------------------------
 
-export const AuthTag = Context.GenericTag<AuthLayer>('Auth')
+export const AuthTag = getLayerTag<AuthLayer>('auth')
 
 // ---------------------------------------------------------------------------
 // Plugin type
 // ---------------------------------------------------------------------------
 
-/**
- * A better-auth plugin configuration. These are passed to the betterAuth()
- * factory and forwarded to better-auth's plugin system.
- *
- * Use the plugin helpers from '@ydtb/anvil-layer-auth/plugins'.
- */
 export interface AuthPlugin {
-  /** Plugin identifier */
   id: string
-  /** The better-auth plugin configuration object */
   plugin: unknown
 }
 
@@ -111,19 +101,16 @@ export interface BetterAuthConfig {
   /** Base URL of the application (used for OAuth callbacks, email links) */
   baseURL?: string
   /**
-   * Database connection string or reference.
-   * If a string, better-auth connects directly.
-   * If you want to share the database layer's connection, pass the URL
-   * that your postgres layer uses.
+   * Database connection string.
+   * Used by better-auth for its own tables (users, sessions, accounts).
+   * In the future, this could reference the database layer's connection directly.
    */
   database: string
   /** better-auth plugins */
   plugins?: AuthPlugin[]
   /** Session configuration */
   session?: {
-    /** Session duration in seconds (default: 7 days) */
     expiresIn?: number
-    /** How often to refresh the session (default: 1 day) */
     updateAge?: number
   }
   /** Additional better-auth options */
@@ -137,23 +124,12 @@ export interface BetterAuthConfig {
 /**
  * Create a better-auth authentication layer.
  *
- * Initializes better-auth with the provided configuration and plugins.
- * The auth handler should be mounted at /api/auth/* for sign-in, sign-up,
- * callbacks, and session management.
+ * The auth layer declares a dependency on the database layer via Effect's
+ * dependency system. The lifecycle manager boots database first, then auth.
  *
- * @example
- * ```ts
- * import { betterAuth } from '@ydtb/anvil-layer-auth'
- *
- * defineApp({
- *   layers: {
- *     auth: betterAuth({
- *       secret: env.AUTH_SECRET,
- *       database: env.DATABASE_URL,
- *     }),
- *   },
- * })
- * ```
+ * Note: better-auth currently manages its own database connection via the
+ * `database` config string. In the future, we can pass the shared Drizzle
+ * instance from the database layer once better-auth supports it.
  */
 export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
   const {
@@ -169,7 +145,6 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
     AuthTag,
     Effect.acquireRelease(
       Effect.promise(async () => {
-        // Dynamic import — better-auth is a peer-ish dependency
         const { betterAuth: createAuth } = await import('better-auth')
 
         const auth = createAuth({
@@ -180,8 +155,8 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
             url: database,
           },
           session: {
-            expiresIn: session.expiresIn ?? 60 * 60 * 24 * 7, // 7 days
-            updateAge: session.updateAge ?? 60 * 60 * 24, // 1 day
+            expiresIn: session.expiresIn ?? 60 * 60 * 24 * 7,
+            updateAge: session.updateAge ?? 60 * 60 * 24,
           },
           plugins: plugins.map((p) => p.plugin),
           ...options,
@@ -204,8 +179,6 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
 
           getUser: async (userId: string) => {
             try {
-              // Use the session API to look up users — better-auth doesn't expose
-              // a direct getUser endpoint, but the internal API can be accessed
               const api = auth.api as any
               if (typeof api.getUser === 'function') {
                 const user = await api.getUser({ query: { id: userId } })
@@ -226,22 +199,18 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
             }
           },
 
-          handler: (request: Request) => {
-            return auth.handler(request)
-          },
+          handler: (request: Request) => auth.handler(request),
 
           instance: auth,
         }
 
         return service
       }),
-      // Release: nothing to clean up — better-auth is stateless (uses the DB layer's connection)
       () => Effect.void,
     ),
   )
 
-  return createLayerConfig('auth', AuthTag, effectLayer, {
+  return createLayerConfig('auth', effectLayer, {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
   })
 }
-

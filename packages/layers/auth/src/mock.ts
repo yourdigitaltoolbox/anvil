@@ -22,11 +22,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { AuthLayer, AuthSession, AuthUser } from './index.ts'
-import { AuthTag } from './index.ts'
+
+const AuthTag = getLayerTag<AuthLayer>('auth')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -117,7 +118,6 @@ export function mockAuth(config?: MockAuthConfig): LayerConfig<'auth'> {
 
   return createLayerConfig(
     'auth',
-    AuthTag,
     Layer.succeed(AuthTag, service),
     {
       healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

@@ -46,13 +46,12 @@ describe('noop errors layer', () => {
     let capturedError: Error | null = null
 
     // Create a custom noop that tracks captures
-    const { Context, Layer } = await import('effect')
-    const { ErrorTag } = await import('../index.ts')
-    const { createLayerConfig } = await import('@ydtb/anvil-server')
+    const { Layer } = await import('effect')
+    const { createLayerConfig, getLayerTag } = await import('@ydtb/anvil-server')
 
+    const ErrorTag = getLayerTag<import('../index.ts').ErrorLayer>('errors')
     const trackingErrors = createLayerConfig(
       'errors',
-      ErrorTag,
       Layer.succeed(ErrorTag, {
         capture: (err: Error) => { capturedError = err },
         setUser: () => {},

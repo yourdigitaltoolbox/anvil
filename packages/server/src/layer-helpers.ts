@@ -1,57 +1,77 @@
 /**
  * Layer authoring helpers — typed factory for creating LayerConfig objects.
  *
- * Layer packages use `createLayerConfig()` instead of manually constructing
- * the `{ tag, layer }` bundle. This enforces the correct shape and provides
- * type safety without exposing Effect internals to the core types package.
+ * Two ways to create layers:
  *
- * @example
+ * 1. **Simple layers (no dependencies):**
  * ```ts
- * import { Context, Effect, Layer } from 'effect'
- * import { createLayerConfig } from '@ydtb/anvil-server'
+ * import { getLayerTag, createLayerConfig } from '@ydtb/anvil-server'
  *
- * const DatabaseTag = Context.GenericTag<DatabaseLayer>('Database')
- *
- * export function postgres(config: { url: string }): LayerConfig<'database'> {
- *   const effectLayer = Layer.scoped(DatabaseTag,
- *     Effect.gen(function* () {
- *       const conn = yield* Effect.acquireRelease(...)
- *       return { db: drizzle(conn) }
- *     })
- *   )
- *
- *   return createLayerConfig('database', DatabaseTag, effectLayer, {
- *     healthCheck: Effect.gen(function* () {
- *       const { db } = yield* DatabaseTag
- *       yield* Effect.tryPromise(() => db.execute(sql`SELECT 1`))
- *       return { status: 'ok', latencyMs: 0 }
- *     }),
- *   })
- * }
+ * const tag = getLayerTag<DatabaseLayer>('database')
+ * const layer = Layer.scoped(tag, Effect.acquireRelease(...))
+ * return createLayerConfig('database', layer)
  * ```
+ *
+ * 2. **Layers with dependencies:**
+ * ```ts
+ * import { getLayerTag, createLayerConfig } from '@ydtb/anvil-server'
+ *
+ * const authTag = getLayerTag<AuthLayer>('auth')
+ * const dbTag = getLayerTag<DatabaseLayer>('database')
+ *
+ * const layer = Layer.scoped(authTag,
+ *   Effect.gen(function* () {
+ *     const { db } = yield* dbTag  // declares dependency on database
+ *     return createAuthService(db)
+ *   })
+ * )
+ * return createLayerConfig('auth', layer)
+ * ```
+ *
+ * The lifecycle manager uses Effect's dependency resolution to boot
+ * layers in the correct order automatically.
  */
 
 import type { Context, Effect, Layer } from 'effect'
 import type { LayerConfig, LayerMap, HealthStatus } from '@ydtb/anvil'
+import { getLayerTag } from './layer-tags.ts'
 
 /**
  * Create a typed LayerConfig with the correct internal structure.
  *
- * This is the recommended way to build LayerConfig objects in layer packages.
- * It enforces the `{ tag, layer }` bundle shape that the lifecycle manager
- * expects, without requiring layer authors to know about the internal contract.
+ * The tag is automatically derived from the layer key via getLayerTag().
+ * The layer may have dependencies on other layers — these are resolved
+ * automatically by the lifecycle manager via Effect's dependency graph.
  *
  * @param id - The layer key (must match a key in LayerMap)
- * @param tag - The Effect Context.Tag for this service
- * @param layer - The Effect Layer that provides the service
- * @param options - Optional health check and other config
+ * @param layer - The Effect Layer that provides the service (may depend on other layers)
+ * @param options - Optional health check
  */
 export function createLayerConfig<K extends keyof LayerMap>(
   id: K,
-  tag: Context.Tag<LayerMap[K], LayerMap[K]>,
-  layer: Layer.Layer<LayerMap[K], never, never>,
+  layer: Layer.Layer<LayerMap[K], never, any>,
   options?: {
     /** Health check Effect. May require the layer's own service (runs inside ManagedRuntime). */
+    healthCheck?: Effect.Effect<HealthStatus, never, any>
+  },
+): LayerConfig<K> {
+  const tag = getLayerTag<LayerMap[K]>(id as string)
+  return {
+    id,
+    _effectLayer: { tag, layer },
+    _healthCheck: options?.healthCheck,
+  }
+}
+
+/**
+ * @deprecated Use `createLayerConfig(id, layer, options)` with `getLayerTag()` instead.
+ * This overload accepts an explicit tag for backwards compatibility.
+ */
+export function createLayerConfigWithTag<K extends keyof LayerMap>(
+  id: K,
+  tag: Context.Tag<LayerMap[K], LayerMap[K]>,
+  layer: Layer.Layer<LayerMap[K], never, any>,
+  options?: {
     healthCheck?: Effect.Effect<HealthStatus, never, any>
   },
 ): LayerConfig<K> {

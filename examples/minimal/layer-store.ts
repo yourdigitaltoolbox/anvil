@@ -10,9 +10,9 @@
  * In a real app, this would be @ydtb/anvil-layer-postgres or similar.
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '../../packages/anvil/src/index.ts'
-import { createLayerConfig } from '../../packages/server/src/index.ts'
+import { createLayerConfig, getLayerTag } from '../../packages/server/src/index.ts'
 
 // ---------------------------------------------------------------------------
 // 1. Define the contract
@@ -38,7 +38,7 @@ declare module '../../packages/anvil/src/index.ts' {
 // 3. Effect internals
 // ---------------------------------------------------------------------------
 
-const StoreTag = Context.GenericTag<StoreLayer>('Store')
+const StoreTag = getLayerTag<StoreLayer>('store')
 
 // ---------------------------------------------------------------------------
 // 4. Factory using createLayerConfig — enforces correct shape
@@ -53,7 +53,7 @@ export function memoryStore(): LayerConfig<'store'> {
     keys: () => [...data.keys()],
   }
 
-  return createLayerConfig('store', StoreTag, Layer.succeed(StoreTag, service), {
+  return createLayerConfig('store', Layer.succeed(StoreTag, service), {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
   })
 }

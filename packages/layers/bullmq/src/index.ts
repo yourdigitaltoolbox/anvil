@@ -28,9 +28,9 @@
 
 import { Queue, Worker } from 'bullmq'
 import type { Job } from 'bullmq'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -68,7 +68,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const JobTag = Context.GenericTag<JobLayer>('Jobs')
+const JobTag = getLayerTag<JobLayer>('jobs')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -174,7 +174,7 @@ export function bullmq(config: BullMQConfig): LayerConfig<'jobs'> {
     } satisfies HealthStatus
   })
 
-  return createLayerConfig('jobs', JobTag, effectLayer, {
+  return createLayerConfig('jobs', effectLayer, {
     healthCheck,
   })
 }

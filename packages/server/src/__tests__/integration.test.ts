@@ -12,11 +12,11 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import { Hono } from 'hono'
 import { defineApp, defineServer, defineExtension, scope } from '@ydtb/anvil'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc } from '../index.ts'
+import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc, getLayerTag, createLayerConfig } from '../index.ts'
 import type { RouteMatch, RegisteredRoute } from '../index.ts'
 import { provideLayerResolver, provideHookSystem, provideContributions } from '../accessors.ts'
 
@@ -36,7 +36,7 @@ declare module '@ydtb/anvil' {
   }
 }
 
-const TestStore = Context.GenericTag<TestStoreLayer>('TestStore')
+const TestStore = getLayerTag<TestStoreLayer>('testStore')
 
 function createTestStoreLayer(): LayerConfig<'testStore'> {
   const store = new Map<string, string>()
@@ -45,14 +45,9 @@ function createTestStoreLayer(): LayerConfig<'testStore'> {
     set: (key, value) => store.set(key, value),
   }
 
-  return {
-    id: 'testStore',
-    _effectLayer: {
-      tag: TestStore,
-      layer: Layer.succeed(TestStore, service),
-    },
-    _healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
-  }
+  return createLayerConfig('testStore', Layer.succeed(TestStore, service), {
+    healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
+  })
 }
 
 // ---------------------------------------------------------------------------

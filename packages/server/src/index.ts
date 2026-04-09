@@ -52,7 +52,8 @@ export { createSpaHandler } from './spa-handler.ts'
 export type { RouteMatch, SpaHandlerConfig, RegisteredRoute } from './spa-handler.ts'
 
 // Layer authoring helpers
-export { createLayerConfig } from './layer-helpers.ts'
+export { createLayerConfig, createLayerConfigWithTag } from './layer-helpers.ts'
+export { getLayerTag } from './layer-tags.ts'
 
 // Test helpers
 export { provideLayerResolver, provideHookSystem, provideContributions } from './accessors.ts'

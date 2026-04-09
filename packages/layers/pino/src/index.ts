@@ -35,9 +35,9 @@
  */
 
 import pinoLib from 'pino'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig, Logger } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -62,7 +62,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const LoggingTag = Context.GenericTag<LoggingLayer>('Logging')
+const LoggingTag = getLayerTag<LoggingLayer>('logging')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -122,7 +122,6 @@ export function pino(config: PinoConfig = {}): LayerConfig<'logging'> {
 
   return createLayerConfig(
     'logging',
-    LoggingTag,
     Layer.succeed(LoggingTag, service),
     {
       healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

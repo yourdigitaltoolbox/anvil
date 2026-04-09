@@ -31,9 +31,9 @@
  */
 
 import { Resend } from 'resend'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -67,7 +67,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const EmailTag = Context.GenericTag<EmailLayer>('Email')
+const EmailTag = getLayerTag<EmailLayer>('email')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -149,7 +149,7 @@ export function resend(config: ResendConfig): LayerConfig<'email'> {
   )
 
   // Health check: always ok (stateless HTTP client)
-  return createLayerConfig('email', EmailTag, effectLayer, {
+  return createLayerConfig('email', effectLayer, {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
   })
 }

@@ -16,11 +16,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { EmailLayer, EmailMessage } from './index.ts'
-import { EmailTag } from './index.ts'
+
+const EmailTag = getLayerTag<EmailLayer>('email')
 
 // ---------------------------------------------------------------------------
 // Factory
@@ -68,7 +69,6 @@ export function consoleEmail(options?: ConsoleEmailConfig): LayerConfig<'email'>
 
   return createLayerConfig(
     'email',
-    EmailTag,
     Layer.succeed(EmailTag, service),
     {
       healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

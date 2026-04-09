@@ -35,9 +35,9 @@ import {
   HeadObjectCommand,
   HeadBucketCommand,
 } from '@aws-sdk/client-s3'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -70,7 +70,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const StorageTag = Context.GenericTag<StorageLayer>('Storage')
+const StorageTag = getLayerTag<StorageLayer>('storage')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -257,7 +257,7 @@ export function s3(config: S3Config): LayerConfig<'storage'> {
     } satisfies HealthStatus
   })
 
-  return createLayerConfig('storage', StorageTag, effectLayer, {
+  return createLayerConfig('storage', effectLayer, {
     healthCheck,
   })
 }

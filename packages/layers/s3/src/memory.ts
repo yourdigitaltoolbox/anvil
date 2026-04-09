@@ -16,11 +16,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { StorageLayer } from './index.ts'
-import { StorageTag } from './index.ts'
+
+const StorageTag = getLayerTag<StorageLayer>('storage')
 
 // ---------------------------------------------------------------------------
 // In-memory store
@@ -103,7 +104,6 @@ export function memoryStorage(config?: MemoryStorageConfig): LayerConfig<'storag
 
   return createLayerConfig(
     'storage',
-    StorageTag,
     Layer.succeed(StorageTag, service),
     {
       healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

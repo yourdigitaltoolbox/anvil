@@ -32,9 +32,9 @@
 import postgresJs from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js'
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 
 // ---------------------------------------------------------------------------
 // Layer contract
@@ -61,7 +61,7 @@ declare module '@ydtb/anvil' {
 // Effect tag
 // ---------------------------------------------------------------------------
 
-export const DatabaseTag = Context.GenericTag<DatabaseLayer>('Database')
+const DatabaseTag = getLayerTag<DatabaseLayer>('database')
 
 // ---------------------------------------------------------------------------
 // Config
@@ -148,7 +148,7 @@ export function postgres(config: PostgresConfig): LayerConfig<'database'> {
     } satisfies HealthStatus
   })
 
-  return createLayerConfig('database', DatabaseTag, effectLayer, {
+  return createLayerConfig('database', effectLayer, {
     healthCheck,
   })
 }

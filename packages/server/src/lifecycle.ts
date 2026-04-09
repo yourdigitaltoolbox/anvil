@@ -43,9 +43,11 @@ export interface LifecycleManager {
  */
 export interface EffectLayerBundle {
   /** The Effect Context.Tag for resolving the service from the runtime */
-  tag: Context.Tag<unknown, unknown>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  tag: Context.Tag<any, any>
   /** The Effect Layer that provides the service (with lifecycle) */
-  layer: Layer.Layer<unknown, never, never>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  layer: Layer.Layer<any, never, any>
 }
 
 // ---------------------------------------------------------------------------
@@ -80,16 +82,18 @@ export async function bootLifecycle(layers: RequiredLayers): Promise<LifecycleMa
     healthCheck: config._healthCheck as Effect.Effect<HealthStatus, never, never> | undefined,
   }))
 
-  // Compose all layers into a single layer
-  const composedLayer = bundles.reduce(
-    (acc, { bundle }) => Layer.merge(acc, bundle.layer),
-    Layer.empty as Layer.Layer<unknown, never, never>
+  // Compose all layers with dependency resolution.
+  // Layer.provideMerge resolves inter-layer dependencies:
+  // if auth depends on database, Effect figures out the boot order.
+  const composedLayer = bundles.reduce<Layer.Layer<any, never, any>>(
+    (acc, { bundle }) => Layer.provideMerge(acc, bundle.layer),
+    Layer.empty as unknown as Layer.Layer<any, never, any>,
   )
 
   // Create the ManagedRuntime — this acquires all resources
   logger.info({ layers: entries.map(([key]) => key) }, 'Booting layers')
 
-  const runtime = ManagedRuntime.make(composedLayer)
+  const runtime = ManagedRuntime.make(composedLayer as Layer.Layer<any, never, never>)
 
   // Resolve each service from the runtime using its tag
   const resolvedLayers = new Map<string, unknown>()

@@ -17,11 +17,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { JobLayer } from './index.ts'
-import { JobTag } from './index.ts'
+
+const JobTag = getLayerTag<JobLayer>('jobs')
 
 // ---------------------------------------------------------------------------
 // In-memory job store
@@ -96,7 +97,6 @@ export function memoryJobs(): LayerConfig<'jobs'> {
 
   return createLayerConfig(
     'jobs',
-    JobTag,
     Layer.succeed(JobTag, service),
     {
       healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

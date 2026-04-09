@@ -14,11 +14,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig, Logger } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { LoggingLayer } from './index.ts'
-import { LoggingTag } from './index.ts'
+
+const LoggingTag = getLayerTag<LoggingLayer>('logging')
 
 /**
  * Create a no-op silent logger. All log calls are discarded.
@@ -53,7 +54,6 @@ export function silent(): LayerConfig<'logging'> {
 
   return createLayerConfig(
     'logging',
-    LoggingTag,
     Layer.succeed(LoggingTag, service),
   )
 }

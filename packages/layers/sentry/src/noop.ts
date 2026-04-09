@@ -14,11 +14,12 @@
  * ```
  */
 
-import { Context, Effect, Layer } from 'effect'
+import { Effect, Layer } from 'effect'
 import type { LayerConfig } from '@ydtb/anvil'
-import { createLayerConfig } from '@ydtb/anvil-server'
+import { createLayerConfig, getLayerTag } from '@ydtb/anvil-server'
 import type { ErrorLayer } from './index.ts'
-import { ErrorTag } from './index.ts'
+
+const ErrorTag = getLayerTag<ErrorLayer>('errors')
 
 /**
  * No-op error layer — logs to console, doesn't send anywhere.
@@ -48,7 +49,6 @@ export function noopErrors(options?: { silent?: boolean }): LayerConfig<'errors'
 
   return createLayerConfig(
     'errors',
-    ErrorTag,
     Layer.succeed(ErrorTag, service),
   )
 }
