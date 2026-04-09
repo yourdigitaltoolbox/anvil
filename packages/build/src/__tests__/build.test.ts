@@ -8,17 +8,21 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { defineApp, defineTool, defineExtension, scope } from '@ydtb/anvil'
-import { collectTools, collectToolsWithScopes } from '../collect-tools.ts'
+import { defineApp, defineExtension } from '@ydtb/anvil'
 import {
+  defineTool,
+  scope,
+  collectTools,
+  collectToolsWithScopes,
   generateServerToolsModule,
   generateClientToolsModule,
   generateSchemaModule,
   generateScopeTreeModule,
   generatePermissionsModule,
   generateExtensionsModule,
-} from '../generators.ts'
+} from '@ydtb/anvil-toolkit'
 import { anvilPlugin } from '../plugin.ts'
+import { toolkitModules } from '@ydtb/anvil-toolkit/build'
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -193,7 +197,7 @@ describe('generateExtensionsModule', () => {
 
 describe('anvilPlugin', () => {
   it('resolves virtual module IDs', () => {
-    const plugin = anvilPlugin(testConfig)
+    const plugin = anvilPlugin(testConfig, { modules: toolkitModules(testConfig) })
 
     expect(plugin.resolveId('virtual:anvil/server-tools')).toBe('\0virtual:anvil/server-tools')
     expect(plugin.resolveId('virtual:anvil/client-tools')).toBe('\0virtual:anvil/client-tools')
@@ -204,13 +208,13 @@ describe('anvilPlugin', () => {
   })
 
   it('returns undefined for non-virtual modules', () => {
-    const plugin = anvilPlugin(testConfig)
+    const plugin = anvilPlugin(testConfig, { modules: toolkitModules(testConfig) })
     expect(plugin.resolveId('./some-file.ts')).toBeUndefined()
     expect(plugin.resolveId('react')).toBeUndefined()
   })
 
   it('loads generated source for resolved virtual modules', () => {
-    const plugin = anvilPlugin(testConfig)
+    const plugin = anvilPlugin(testConfig, { modules: toolkitModules(testConfig) })
 
     const source = plugin.load('\0virtual:anvil/server-tools')
     expect(source).toContain("import * as tool_dashboard")
@@ -218,12 +222,12 @@ describe('anvilPlugin', () => {
   })
 
   it('returns undefined for non-virtual loads', () => {
-    const plugin = anvilPlugin(testConfig)
+    const plugin = anvilPlugin(testConfig, { modules: toolkitModules(testConfig) })
     expect(plugin.load('./some-file.ts')).toBeUndefined()
   })
 
   it('caches generated modules', () => {
-    const plugin = anvilPlugin(testConfig)
+    const plugin = anvilPlugin(testConfig, { modules: toolkitModules(testConfig) })
 
     const first = plugin.load('\0virtual:anvil/server-tools')
     const second = plugin.load('\0virtual:anvil/server-tools')

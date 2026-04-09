@@ -23,6 +23,7 @@
     "@tanstack/react-query": { "optional": true }
   },
   "devDependencies": {
+    "@ydtb/anvil-toolkit": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "jsdom": "^26.1.0",

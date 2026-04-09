@@ -14,9 +14,11 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { Hono } from 'hono'
-import { defineApp, defineServer, defineExtension, scope } from '@ydtb/anvil'
+import { defineApp, defineExtension } from '@ydtb/anvil'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc, getLayerTag, createLayerConfig, withCache, cacheMiddleware, invalidateCache } from '../index.ts'
+import { defineServer, scope, toolEntry as makeToolEntry } from '@ydtb/anvil-toolkit'
+import { createServer, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc, getLayerTag, createLayerConfig, withCache, cacheMiddleware, invalidateCache } from '../index.ts'
+import { createToolServer, createToolWorker, toolEntry } from '@ydtb/anvil-toolkit'
 import type { RouteMatch, RegisteredRoute } from '../index.ts'
 import { provideLayerResolver, provideHookSystem, provideContributions } from '../accessors.ts'
 
@@ -159,7 +161,7 @@ describe('anvil-server integration', () => {
       extensions: [widgetsExtension],
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [testTool],
     })
@@ -248,7 +250,7 @@ describe('anvil-server integration', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [],
     })
@@ -277,7 +279,7 @@ describe('anvil-server integration', () => {
     })
 
     // Capture the processed surfaces to verify contributions
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [testTool],
     })
@@ -299,7 +301,7 @@ describe('anvil-server integration', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
 
     // Don't call start() — server not booted
     const readyRes = await server.app.request('/readyz')
@@ -316,7 +318,7 @@ describe('anvil-server integration', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [],
       routes: { settings: appRouter },
@@ -352,7 +354,7 @@ describe('anvil-server integration', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [{ id: 'orpc-tool', module: { default: toolSurface } }],
     })
@@ -385,7 +387,7 @@ describe('anvil-server integration', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [{ id: 'handle-tool', module: { default: toolSurface } }],
     })
@@ -413,7 +415,7 @@ describe('error handling', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
 
     // Register a route that throws BEFORE first request
     server.app.get('/api/explode', () => {
@@ -446,7 +448,7 @@ describe('anvil-worker', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const worker = createWorker({
+    const worker = createToolWorker({
       config,
       tools: [jobTool],
     })
@@ -484,7 +486,7 @@ describe('anvil-worker', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const worker = createWorker({ config, tools: [] })
+    const worker = createToolWorker({ config, tools: [] })
     await worker.start()
 
     const jobs = worker.getJobs()
@@ -681,7 +683,7 @@ describe('middleware priorities', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [],
       middleware: [
@@ -710,7 +712,7 @@ describe('middleware priorities', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
+    const server = createToolServer({
       config,
       tools: [],
       middleware: [
@@ -742,7 +744,7 @@ describe('cache helpers', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
     await server.start()
 
     // No cache layer — withCache should still work
@@ -769,7 +771,7 @@ describe('cache helpers', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
     await server.start()
 
     let computeCount = 0
@@ -806,7 +808,7 @@ describe('cache helpers', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
     await server.start()
 
     let computeCount = 0
@@ -845,7 +847,7 @@ describe('cache helpers', () => {
       scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({ config, tools: [] })
+    const server = createToolServer({ config, tools: [] })
 
     server.app.get('/api/cached', cacheMiddleware({ ttl: 30 }), (c) => {
       handlerCallCount++

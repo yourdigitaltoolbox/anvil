@@ -73,26 +73,7 @@ export interface AnvilPluginOptions {
 export function anvilPlugin(config: AppConfig, options: AnvilPluginOptions = {}) {
   const { debug = false, modules = {} } = options
 
-  // Try to load built-in generators as fallback (backwards compat)
-  let allModules: Record<string, VirtualModuleGenerator> = { ...modules }
-
-  if (Object.keys(allModules).length === 0) {
-    // No modules provided — try loading built-in generators
-    // These will be removed when toolkit code is extracted (Phase 3)
-    try {
-      const generators = require('./generators.ts')
-      allModules = {
-        'virtual:anvil/server-tools': generators.generateServerToolsModule,
-        'virtual:anvil/client-tools': generators.generateClientToolsModule,
-        'virtual:anvil/schema': generators.generateSchemaModule,
-        'virtual:anvil/scope-tree': generators.generateScopeTreeModule,
-        'virtual:anvil/permissions': generators.generatePermissionsModule,
-        'virtual:anvil/extensions': generators.generateExtensionsModule,
-      }
-    } catch {
-      // Generators not available — that's fine if toolkit provides modules
-    }
-  }
+  const allModules: Record<string, VirtualModuleGenerator> = { ...modules }
 
   // Pre-compute cache
   const moduleCache = new Map<string, string>()

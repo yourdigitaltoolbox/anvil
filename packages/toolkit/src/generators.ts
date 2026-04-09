@@ -160,17 +160,17 @@ export function generateSchemaModule(config: AppConfig): string {
  * ```
  */
 export function generateScopeTreeModule(config: AppConfig): string {
-  function serializeScope(scope: import('@ydtb/anvil').ScopeDefinition): unknown {
+  function serializeScope(scope: import('./scope.ts').ScopeDefinition): unknown {
     return {
       type: scope.type,
       label: scope.label,
       urlPrefix: scope.urlPrefix,
-      includes: (scope.includes ?? []).map((t) => ({ id: t.id, name: t.name })),
+      includes: (scope.includes ?? []).map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })),
       children: (scope.children ?? []).map(serializeScope),
     }
   }
 
-  const tree = serializeScope(config.scopes as import('@ydtb/anvil').ScopeDefinition)
+  const tree = serializeScope(config.scopes as import('./scope.ts').ScopeDefinition)
   return `export const scopeTree = ${JSON.stringify(tree, null, 2)}`
 }
 

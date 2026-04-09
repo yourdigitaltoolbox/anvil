@@ -29,6 +29,7 @@
       "devDependencies": {
         "@types/bun": "^1.3.11",
         "@types/node": "^25.5.2",
+        "@ydtb/anvil-toolkit": "workspace:*",
         "typescript": "^5.8.0",
         "vite": "^6.3.0",
         "vitest": "^4.1.0",
@@ -49,6 +50,7 @@
       "devDependencies": {
         "@testing-library/react": "^16.0.0",
         "@types/react": "^19.0.0",
+        "@ydtb/anvil-toolkit": "workspace:*",
         "jsdom": "^26.1.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
@@ -208,6 +210,7 @@
       "devDependencies": {
         "@types/node": "^25.5.2",
         "@ydtb/anvil-layer-redis": "workspace:*",
+        "@ydtb/anvil-toolkit": "workspace:*",
         "typescript": "^5.8.0",
         "vitest": "^4.1.0",
       },

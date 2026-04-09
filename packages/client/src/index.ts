@@ -1,28 +1,15 @@
 /**
  * @ydtb/anvil-client — Client runtime for Anvil.
  *
+ * Generic client primitives. Toolkit-specific features (route assembly,
+ * app helper) live in @ydtb/anvil-toolkit.
+ *
  * Provides:
- * - `assembleRoutes()` — builds scope-aware route structure from tool surfaces
- * - `createApiClient(toolId)` — typed API client descriptor per tool
+ * - `createApiClient(toolId)` — typed API client descriptor per module
  * - `useLayer(key)` / `LayerProvider` — client-side swappable services
  * - `useScope()` / `ScopeProvider` — current scope context
- *
- * @example
- * ```ts
- * import { createApiClient, useLayer, useScope } from '@ydtb/anvil-client'
- *
- * // Per-tool API client (module scope)
- * export const contactsApi = createApiClient('contacts')
- *
- * // In components
- * const analytics = useLayer('analytics')
- * const { scopeId } = useScope()
- * ```
+ * - `useAuth()` / `AuthProvider` / `AuthGate` — auth state management
  */
-
-// Route assembly (pure functions, no React)
-export { assembleRoutes } from './assemble-routes.ts'
-export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemble-routes.ts'
 
 // API client factory (no React dependency)
 export { createApiClient, configureApiClients } from './api-client.ts'
@@ -35,10 +22,6 @@ export type { ClientLayerMap, LayerProviderProps } from './layers.tsx'
 // Scope context (React)
 export { useScope, ScopeProvider, getCurrentScope } from './scope.tsx'
 export type { ScopeContextValue, ScopeProviderProps } from './scope.tsx'
-
-// App helper
-export { createAnvilApp } from './create-app.tsx'
-export type { AnvilAppConfig, AnvilApp } from './create-app.tsx'
 
 // Auth (React)
 export { AuthProvider, useAuth, AuthGate } from './auth.tsx'

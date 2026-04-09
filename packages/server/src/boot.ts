@@ -21,14 +21,6 @@ import { provideCacheResolver } from './cache-helpers.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
 
-// Fallback import — used during transition, removed in Phase 3
-let _fallbackProcessSurfaces: ((hooks: HookSystem, modules: unknown[], extensions: Extension[]) => ProcessedResult) | null = null
-try {
-  const surfaces = require('./surfaces.ts')
-  _fallbackProcessSurfaces = surfaces.processSurfaces
-} catch {
-  // surfaces.ts not available — toolkit must provide processSurfaces
-}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,13 +98,11 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
 
   // 4. Process module surfaces
   const extensions = config.extensions ?? []
-  const processor = processSurfaces ?? _fallbackProcessSurfaces
-
   let processed: ProcessedResult
-  if (processor) {
-    processed = processor(hooks, modules, extensions)
+  if (processSurfaces) {
+    processed = processSurfaces(hooks, modules, extensions)
   } else {
-    // No surface processor available — return empty result
+    // No surface processor — toolkit not providing one. Empty result.
     processed = { routers: {}, contributions: {}, schemas: {} }
   }
 
