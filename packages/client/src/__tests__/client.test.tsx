@@ -281,3 +281,157 @@ describe('useScope', () => {
     expect(scope.scopeType).toBe('location')
   })
 })
+
+// ---------------------------------------------------------------------------
+// Guards
+// ---------------------------------------------------------------------------
+
+import { defineGuard, runGuardPipeline, defineRouteLayout } from '../index.ts'
+
+describe('defineGuard', () => {
+  it('creates a guard with id and check', () => {
+    const guard = defineGuard({
+      id: 'test',
+      check: () => ({ pass: true }),
+    })
+    expect(guard.id).toBe('test')
+    expect(typeof guard.check).toBe('function')
+  })
+})
+
+describe('runGuardPipeline', () => {
+  it('passes when all guards pass', async () => {
+    const guard1 = defineGuard({
+      id: 'a',
+      check: () => ({ pass: true, context: { userId: 'usr_1' } }),
+    })
+    const guard2 = defineGuard({
+      id: 'b',
+      check: (ctx) => ({ pass: true, context: { role: 'admin', user: ctx.data.userId } }),
+    })
+
+    const result = await runGuardPipeline([guard1, guard2], { path: '/test', params: {} })
+
+    expect('passed' in result && result.passed).toBe(true)
+    if ('passed' in result) {
+      expect(result.data.userId).toBe('usr_1')
+      expect(result.data.role).toBe('admin')
+      expect(result.data.user).toBe('usr_1')
+    }
+  })
+
+  it('stops at first redirect', async () => {
+    const guard1 = defineGuard({
+      id: 'auth',
+      check: () => ({ redirect: '/login' }),
+    })
+    const guard2 = defineGuard({
+      id: 'scope',
+      check: () => ({ pass: true }),
+    })
+
+    const result = await runGuardPipeline([guard1, guard2], { path: '/test', params: {} })
+
+    expect('redirect' in result).toBe(true)
+    if ('redirect' in result) {
+      expect(result.redirect).toBe('/login')
+    }
+  })
+
+  it('stops at first render fallback', async () => {
+    const Fallback = () => null
+    const guard = defineGuard({
+      id: 'check',
+      check: () => ({ render: Fallback }),
+    })
+
+    const result = await runGuardPipeline([guard], { path: '/test', params: {} })
+
+    expect('render' in result).toBe(true)
+    if ('render' in result) {
+      expect(result.render).toBe(Fallback)
+    }
+  })
+
+  it('passes context from earlier guards to later ones', async () => {
+    let capturedData: Record<string, unknown> = {}
+
+    const guard1 = defineGuard({
+      id: 'auth',
+      check: () => ({ pass: true, context: { userId: 'usr_1' } }),
+    })
+    const guard2 = defineGuard({
+      id: 'scope',
+      check: (ctx) => {
+        capturedData = { ...ctx.data }
+        return { pass: true }
+      },
+    })
+
+    await runGuardPipeline([guard1, guard2], { path: '/test', params: {} })
+    expect(capturedData.userId).toBe('usr_1')
+  })
+
+  it('passes URL params to guards', async () => {
+    let capturedParams: Record<string, string> = {}
+
+    const guard = defineGuard({
+      id: 'check',
+      check: (ctx) => {
+        capturedParams = ctx.params
+        return { pass: true }
+      },
+    })
+
+    await runGuardPipeline([guard], { path: '/w/co_123', params: { scopeId: 'co_123' } })
+    expect(capturedParams.scopeId).toBe('co_123')
+  })
+
+  it('works with empty pipeline', async () => {
+    const result = await runGuardPipeline([], { path: '/test', params: {} })
+    expect('passed' in result && result.passed).toBe(true)
+  })
+
+  it('works with async guards', async () => {
+    const guard = defineGuard({
+      id: 'async',
+      check: async () => {
+        await new Promise(r => setTimeout(r, 10))
+        return { pass: true, context: { async: true } }
+      },
+    })
+
+    const result = await runGuardPipeline([guard], { path: '/test', params: {} })
+    expect('passed' in result && result.passed).toBe(true)
+    if ('passed' in result) {
+      expect(result.data.async).toBe(true)
+    }
+  })
+})
+
+describe('defineRouteLayout', () => {
+  it('creates a layout with defaults', () => {
+    const layout = defineRouteLayout({
+      id: 'workspace',
+      urlPrefix: '/w/$scopeId',
+      layout: ({ children }) => React.createElement('div', null, children),
+      guards: [],
+    })
+
+    expect(layout.id).toBe('workspace')
+    expect(layout.urlPrefix).toBe('/w/$scopeId')
+    expect(layout.priority).toBe(100)
+    expect(layout.guards).toEqual([])
+  })
+
+  it('accepts custom priority', () => {
+    const layout = defineRouteLayout({
+      id: 'public',
+      layout: ({ children }) => React.createElement('div', null, children),
+      guards: [],
+      priority: 10,
+    })
+
+    expect(layout.priority).toBe(10)
+  })
+})

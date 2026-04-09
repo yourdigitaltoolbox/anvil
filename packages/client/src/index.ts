@@ -1,15 +1,26 @@
 /**
  * @ydtb/anvil-client — Client runtime for Anvil.
  *
- * Generic client primitives. Toolkit-specific features (route assembly,
- * app helper) live in @ydtb/anvil-toolkit.
- *
- * Provides:
- * - `createApiClient(toolId)` — typed API client descriptor per module
- * - `useLayer(key)` / `LayerProvider` — client-side swappable services
- * - `useScope()` / `ScopeProvider` — current scope context
- * - `useAuth()` / `AuthProvider` / `AuthGate` — auth state management
+ * Generic client primitives:
+ * - Guards — `defineGuard`, composable route access pipeline
+ * - Route layouts — `defineRouteLayout`, containers with guard pipelines
+ * - Layers — `useLayer` / `LayerProvider`, client-side swappable services
+ * - Scope — `useScope` / `ScopeProvider`, current scope context
+ * - Auth — `useAuth` / `AuthProvider` / `AuthGate`, auth state
+ * - API — `createApiClient`, typed API client descriptors
  */
+
+// Guards
+export { defineGuard, runGuardPipeline } from './guards.ts'
+export type { Guard, GuardContext, GuardResult } from './guards.ts'
+
+// Route layouts
+export { defineRouteLayout } from './route-layout.ts'
+export type { RouteLayout } from './route-layout.ts'
+
+// Guarded layout component
+export { GuardedLayout } from './guarded-layout.tsx'
+export type { GuardedLayoutProps } from './guarded-layout.tsx'
 
 // API client factory (no React dependency)
 export { createApiClient, configureApiClients } from './api-client.ts'
