@@ -16,10 +16,11 @@
   "dependencies": {
     "@ydtb/anvil": "workspace:*",
     "@ydtb/anvil-server": "workspace:*",
-    "effect": "^3.14.0",
-    "better-auth": "^1.2.0"
+    "better-auth": "^1.6.2",
+    "effect": "^3.14.0"
   },
   "devDependencies": {
+    "@ydtb/anvil-layer-postgres": "workspace:*",
     "@types/node": "^25.5.2",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"

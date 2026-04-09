@@ -83,10 +83,11 @@ export async function bootLifecycle(layers: RequiredLayers): Promise<LifecycleMa
   }))
 
   // Compose all layers with dependency resolution.
-  // Layer.provideMerge resolves inter-layer dependencies:
-  // if auth depends on database, Effect figures out the boot order.
+  // Layer.provideMerge(self, that): `that` provides services to `self`,
+  // and the result contains both self's and that's services.
+  // Each new layer (self) can depend on the accumulated layers (that).
   const composedLayer = bundles.reduce<Layer.Layer<any, never, any>>(
-    (acc, { bundle }) => Layer.provideMerge(acc, bundle.layer),
+    (acc, { bundle }) => Layer.provideMerge(bundle.layer, acc),
     Layer.empty as unknown as Layer.Layer<any, never, any>,
   )
 

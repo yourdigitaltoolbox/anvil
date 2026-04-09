@@ -1,40 +1,26 @@
 /**
  * @ydtb/anvil-layer-auth — Authentication layer for Anvil.
  *
- * Wraps better-auth with Anvil's layer system. Supports two database modes:
- * - URL string: better-auth manages its own connection
- * - Drizzle adapter: shares the database layer's connection
+ * Wraps better-auth with Anvil's layer system. Uses the database layer's
+ * Drizzle connection via the Drizzle adapter — no separate connection pool.
  *
  * @example
  * ```ts
- * // Simple — URL string (better-auth manages its own connection)
  * import { betterAuth } from '@ydtb/anvil-layer-auth'
- *
- * defineApp({
- *   layers: {
- *     auth: betterAuth({
- *       secret: env.AUTH_SECRET,
- *       database: env.DATABASE_URL,
- *     }),
- *   },
- * })
- * ```
- *
- * ```ts
- * // Advanced — Drizzle adapter (shares database layer's connection)
- * import { betterAuth } from '@ydtb/anvil-layer-auth'
- * import { drizzleAdapter } from 'better-auth/adapters/drizzle'
  *
  * defineApp({
  *   layers: {
  *     database: postgres({ url: env.DATABASE_URL }),
  *     auth: betterAuth({
  *       secret: env.AUTH_SECRET,
- *       database: drizzleAdapter(db, { provider: 'pg', schema }),
+ *       baseURL: env.APP_URL,
  *     }),
  *   },
  * })
  * ```
+ *
+ * The auth layer depends on the database layer. Effect resolves the
+ * boot order automatically — database boots first, auth gets the connection.
  */
 
 import { Effect, Layer } from 'effect'
@@ -101,17 +87,12 @@ export const AuthTag = getLayerTag<AuthLayer>('auth')
 /**
  * A better-auth plugin configuration. Passed to the betterAuth() factory
  * and forwarded to better-auth's plugin system.
- *
- * For Anvil-provided plugins, use '@ydtb/anvil-layer-auth/plugins'.
- * For app-specific plugins (e.g., scope auth), create your own AuthPlugin
- * and pass the raw better-auth plugin object.
  */
 export interface AuthPlugin {
   /** Plugin identifier */
   id: string
   /**
    * The better-auth plugin object.
-   * This is the raw plugin as returned by better-auth's plugin API.
    * Pass the actual better-auth plugin — not a wrapper.
    */
   plugin: unknown
@@ -127,20 +108,24 @@ export interface BetterAuthConfig {
   /** Base URL of the application (used for OAuth callbacks, email links) */
   baseURL?: string
   /**
-   * Database configuration. Accepts either:
-   * - A connection URL string (better-auth manages its own connection)
-   * - A better-auth database adapter object (e.g., drizzleAdapter for shared connections)
+   * Database configuration. Two modes:
    *
-   * For the Drizzle adapter pattern (sharing the database layer's connection):
-   * ```ts
-   * import { drizzleAdapter } from 'better-auth/adapters/drizzle'
+   * 1. **Use the database layer (recommended):**
+   *    Omit this field or pass `undefined`. The auth layer will use
+   *    `getLayer('database')` to get the Drizzle instance via the
+   *    Drizzle adapter. Requires the database layer to be configured.
    *
-   * betterAuth({
-   *   database: drizzleAdapter(db, { provider: 'pg', schema }),
-   * })
-   * ```
+   * 2. **Provide a Drizzle adapter directly:**
+   *    Pass the result of `drizzleAdapter(db, { provider: 'pg' })`.
+   *    Useful when you need custom adapter options or schema.
+   *
+   * 3. **Provide a connection URL (standalone):**
+   *    Pass a string URL. better-auth manages its own connection.
+   *    Requires `pg` or `mysql2` or `better-sqlite3` installed.
    */
-  database: string | { adapter: unknown } | Record<string, unknown>
+  database?: string | Record<string, unknown>
+  /** Drizzle schema to pass to the adapter (for custom table definitions) */
+  schema?: Record<string, unknown>
   /** better-auth plugins — both Anvil-provided and app-specific */
   plugins?: AuthPlugin[]
   /** Session configuration */
@@ -164,30 +149,59 @@ export interface BetterAuthConfig {
 /**
  * Create a better-auth authentication layer.
  *
- * Supports custom better-auth plugins for app-specific auth behavior
- * (e.g., scope-based auth, custom session fields, organization support).
- * Plugins add endpoints, tables, and middleware to better-auth.
+ * By default, uses the database layer's Drizzle connection via the
+ * Drizzle adapter. This means:
+ * - One connection pool shared between database and auth
+ * - Database boots first (Effect resolves dependency graph)
+ * - No extra configuration needed
  */
 export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
   const {
     secret,
     baseURL,
     database,
+    schema,
     plugins = [],
     session = {},
     options = {},
   } = config
 
-  // Resolve database config
-  const databaseConfig = typeof database === 'string'
-    ? { type: 'postgres' as const, url: database }
-    : database
+  // Resolve database dependency through Effect's type system,
+  // not through getLayer() at runtime. This ensures proper boot ordering.
+  const usesDatabaseLayer = database === undefined
 
   const effectLayer = Layer.scoped(
     AuthTag,
     Effect.acquireRelease(
-      Effect.promise(async () => {
-        const { betterAuth: createAuth } = await import('better-auth')
+      Effect.gen(function* () {
+        // Resolve database config through Effect's dependency system
+        let databaseConfig: unknown
+
+        if (usesDatabaseLayer) {
+          const DatabaseTag = getLayerTag<{ db: unknown }>('database')
+          const dbService = yield* DatabaseTag
+
+          if (!dbService || !dbService.db) {
+            return yield* Effect.die(
+              new Error(
+                '[anvil-layer-auth] Database layer not available. ' +
+                'Either configure a database layer or pass a database config to betterAuth().'
+              )
+            )
+          }
+
+          const { drizzleAdapter } = yield* Effect.promise(() => import('better-auth/adapters/drizzle'))
+          databaseConfig = drizzleAdapter(dbService.db as any, {
+            provider: 'pg',
+            ...(schema ? { schema } : {}),
+          })
+        } else if (typeof database === 'string') {
+          databaseConfig = { url: database, type: 'postgres' }
+        } else {
+          databaseConfig = database
+        }
+
+        const { betterAuth: createAuth } = yield* Effect.promise(() => import('better-auth'))
 
         const auth = createAuth({
           secret,
@@ -247,7 +261,7 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
       }),
       () => Effect.void,
     ),
-  )
+  ) as Layer.Layer<AuthLayer, never, any>
 
   return createLayerConfig('auth', effectLayer, {
     healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),

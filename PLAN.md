@@ -14,7 +14,7 @@ Tracks what needs to happen in the framework to support the ydtb-anvil migration
 
 The `betterAuth()` factory has only been tested with `mockAuth()`. Before ydtb-anvil can depend on it, we need to prove it works against a real database.
 
-### A1: ⬜ Real better-auth integration test
+### A1: ✅ Real better-auth integration test
 - Boot `betterAuth()` against the local Supabase postgres (127.0.0.1:54322)
 - Verify better-auth creates its tables (user, session, account, verification)
 - Test: sign up a user via the auth handler
@@ -24,13 +24,13 @@ The `betterAuth()` factory has only been tested with `mockAuth()`. Before ydtb-a
 - **File:** `packages/layers/auth/src/__tests__/real-auth.test.ts`
 - **Depends on:** Running Supabase postgres
 
-### A2: ⬜ Verify Drizzle adapter mode works
+### A2: ✅ Verify Drizzle adapter mode works
 - Test `betterAuth()` with `drizzleAdapter(db, { provider: 'pg', schema })` instead of URL string
 - Verify it shares the database layer's connection pool
 - Verify both `getLayer('database')` and `getLayer('auth')` work in the same server
 - **File:** `packages/layers/auth/src/__tests__/real-auth.test.ts`
 
-### A3: ⬜ Verify plugin forwarding works
+### A3: ✅ Verify plugin forwarding works
 - Create a minimal test plugin (adds one endpoint)
 - Pass it via `betterAuth({ plugins: [wrapPlugin('test', testPlugin)] })`
 - Verify the plugin's endpoint is accessible through the auth handler
