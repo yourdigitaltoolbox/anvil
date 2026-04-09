@@ -27,7 +27,7 @@ export { defineTool } from './define-tool.ts'
 export type { ToolDescriptor } from './define-tool.ts'
 
 // Scope definitions
-export { scope } from './scope.ts'
+export { defineScope, scope } from './scope.ts'
 export type { ScopeDefinition, ScopeTree } from './scope.ts'
 
 // Client surface

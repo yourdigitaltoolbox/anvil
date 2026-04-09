@@ -24,7 +24,7 @@ export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemb
 // Definitions (no server deps)
 export { defineTool } from './define-tool.ts'
 export type { ToolDescriptor } from './define-tool.ts'
-export { scope } from './scope.ts'
+export { defineScope, scope } from './scope.ts'
 export type { ScopeDefinition, ScopeTree } from './scope.ts'
 export { defineClient } from './client.ts'
 export type { Client, ClientCore, RouteEntry, NavigationEntry, PermissionEntry, PermissionGroup } from './client.ts'

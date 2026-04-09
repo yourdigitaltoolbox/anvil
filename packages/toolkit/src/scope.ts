@@ -43,6 +43,9 @@ export type ScopeTree = ScopeDefinition
  * })
  * ```
  */
-export function scope(definition: ScopeDefinition): ScopeDefinition {
+export function defineScope(definition: ScopeDefinition): ScopeDefinition {
   return definition
 }
+
+/** @deprecated Use `defineScope` instead. */
+export const scope = defineScope
