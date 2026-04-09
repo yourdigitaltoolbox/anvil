@@ -70,7 +70,8 @@ Each extension is a package that defines a contract via declaration merging on `
 
 ```ts
 // compose.config.ts
-import { defineApp, defineTool, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineTool, defineScope } from '@ydtb/anvil-toolkit/core'
 import { postgres } from '@ydtb/anvil-layer-postgres'
 import { redis } from '@ydtb/anvil-layer-redis'
 import { bullmq } from '@ydtb/anvil-layer-bullmq'
@@ -111,15 +112,15 @@ export default defineApp({
   extensions: [onboarding, search, dashboardExt, notifications],
 
   // Scope hierarchy — each level opts into tools
-  scopes: scope({
+  scopes: defineScope({
     type: 'system', label: 'System', urlPrefix: '/s',
     includes: [dashboardTool],
     children: [
-      scope({
+      defineScope({
         type: 'company', label: 'Company', urlPrefix: '/c/$scopeId',
         includes: [dashboardTool, billing, team],
         children: [
-          scope({
+          defineScope({
             type: 'location', label: 'Location', urlPrefix: '/l/$scopeId',
             includes: [dashboardTool, billing, contacts, team, offers],
           }),
@@ -209,7 +210,7 @@ export default defineApp({
     email: consoleEmail(),     // logs emails instead of sending
     storage: memoryStorage(),  // in-memory file storage
   },
-  scopes: scope({ /* ... */ }),
+  scopes: defineScope({ /* ... */ }),
 })
 ```
 
@@ -475,7 +476,7 @@ The `Client` and `Server` types are composed of **core fields** (processed by th
 
 ```ts
 // tools/contacts/src/index.ts
-import { defineTool } from '@ydtb/anvil'
+import { defineTool } from '@ydtb/anvil-toolkit/core'
 
 export const contacts = defineTool({
   id: 'contacts',
@@ -490,7 +491,7 @@ Declarative object — routes, navigation, cards, permissions, settings, etc. Sc
 
 ```ts
 // tools/contacts/src/client.ts
-import { defineClient, createApiClient } from '@ydtb/anvil'
+import { defineClient, createApiClient } from '@ydtb/anvil-toolkit/core'
 import type { ContactsRouter } from './api/router'
 
 export const contactsApi = createApiClient<ContactsRouter>('contacts')
@@ -533,7 +534,7 @@ export default defineClient({
 
 ```ts
 // tools/contacts/src/server.ts
-import { defineServer } from '@ydtb/anvil'
+import { defineServer } from '@ydtb/anvil-toolkit/core'
 import { contacts, contactNotes } from './db/schema'
 import { contactsRouter } from './api/router'
 
@@ -580,7 +581,7 @@ An extension is a package that:
 
 ```ts
 // @myapp/ext-search — a search extension package
-import { defineExtension } from '@ydtb/anvil'
+import { defineExtension } from '@ydtb/anvil-toolkit/core'
 import type { SearchProvider } from './types'
 
 // 1. Define the extension

@@ -18,6 +18,7 @@
     "@sentry/node": "^9.25.0"
   },
   "devDependencies": {
+    "@ydtb/anvil-toolkit": "workspace:*",
     "@types/node": "^25.5.2",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"

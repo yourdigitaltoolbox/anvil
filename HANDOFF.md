@@ -28,7 +28,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 **Core framework complete. All layer packages done. YDTB consuming project scaffolded.** Thirteen packages built. 141 tests passing. Example app + YDTB-on-Anvil both running.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
-- Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
+- Five primitives: `defineApp`, `defineTool`, `defineScope`, `defineClient`/`defineServer`, `defineExtension`
 - Universal extensibility: `LayerMap`, `ClientContributions`, `ServerContributions` — all empty, augmented via declaration merging
 - `LayerConfig`, `RequiredLayers` — derive from `LayerMap`, no hardcoded layer contracts
 - `ClientCore` / `ServerCore` — framework-owned surface fields, separate from extension contributions
@@ -362,7 +362,7 @@ In code:
 
 ```ts
 // @ydtb/ext-onboarding — an extension package
-import { defineExtension } from '@ydtb/anvil'
+import { defineExtension } from '@ydtb/anvil-toolkit/core'
 
 export const onboarding = defineExtension({
   id: 'onboarding',
@@ -391,7 +391,7 @@ declare module '@ydtb/anvil' {
 export default defineApp({
   brand: { name: 'YDTB' },
   layers: { ... },
-  scopes: scope({ ... }),
+  scopes: defineScope({ ... }),
   extensions: [onboarding, search, notifications, dashboard],
 })
 ```

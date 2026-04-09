@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
 import { createServer, getLayer, provideLayerResolver, provideHookSystem, provideContributions, provideLoggingLayerResolver } from '@ydtb/anvil-server'
 import { noopErrors } from '../noop.ts'
 
@@ -23,7 +24,7 @@ describe('noop errors layer', () => {
       layers: {
         errors: noopErrors({ silent: true }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({ config, tools: [] })
@@ -64,7 +65,7 @@ describe('noop errors layer', () => {
       layers: {
         errors: trackingErrors,
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({ config, tools: [] })

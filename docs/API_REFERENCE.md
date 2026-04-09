@@ -198,7 +198,7 @@ The toolkit package provides the YDTB tool/scope module system on top of the gen
 | Function | Import | Description |
 |---|---|---|
 | `defineTool(descriptor)` | `@ydtb/anvil-toolkit` | Declare a tool's identity (id, name, package) |
-| `scope(definition)` | `@ydtb/anvil-toolkit` | Define a scope in the organizational hierarchy |
+| `defineScope(definition)` | `@ydtb/anvil-toolkit` | Define a scope in the organizational hierarchy |
 | `defineClient(definition)` | `@ydtb/anvil-toolkit` | Define a tool's client surface (routes, navigation, permissions) |
 | `defineServer(definition)` | `@ydtb/anvil-toolkit` | Define a tool's server surface (router, hooks, jobs, schema) |
 | `createToolServer(config)` | `@ydtb/anvil-toolkit` | Create a server with tool surface processing (extends `createServer`) |

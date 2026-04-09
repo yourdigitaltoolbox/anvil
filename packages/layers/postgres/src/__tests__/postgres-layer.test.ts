@@ -13,7 +13,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest'
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
 import { createServer, getLayer, provideLayerResolver, provideHookSystem, provideContributions, provideLoggingLayerResolver } from '@ydtb/anvil-server'
 import { postgres } from '../index.ts'
 import { testPostgres } from '../test.ts'
@@ -61,7 +62,7 @@ describe('postgres + createServer integration', () => {
       layers: {
         database: testPostgres({ url: TEST_URL }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({ config, tools: [] })
@@ -110,7 +111,7 @@ describe('postgres + createServer integration', () => {
       layers: {
         database: testPostgres({ url: TEST_URL }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({

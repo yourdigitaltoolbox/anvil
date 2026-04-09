@@ -9,7 +9,7 @@ Anvil lets you compose an application from independent pieces:
 ```ts
 // compose.config.ts — one file declares your entire app
 import { defineApp } from '@ydtb/anvil'
-import { scope } from '@ydtb/anvil-toolkit'
+import { defineScope } from '@ydtb/anvil-toolkit'
 import { postgres } from '@ydtb/anvil-layer-postgres'
 import { pino } from '@ydtb/anvil-layer-pino'
 import { betterAuth } from '@ydtb/anvil-layer-auth'
@@ -23,7 +23,7 @@ export default defineApp({
     auth: betterAuth({ secret: process.env.AUTH_SECRET! }),
   },
 
-  scopes: scope({
+  scopes: defineScope({
     type: 'workspace',
     label: 'Workspace',
     urlPrefix: '/w/$scopeId',
@@ -79,7 +79,7 @@ Toolkits define module systems on top of the generic framework. `@ydtb/anvil-too
 | Toolkit Primitive | What | Example |
 |---|---|---|
 | **Tools** | `defineTool` + `defineClient` + `defineServer` — business features | Contacts, billing, team -- each a self-contained package |
-| **Scopes** | `scope` — organizational hierarchy and routing | Workspace > Company > Project |
+| **Scopes** | `defineScope` — organizational hierarchy and routing | Workspace > Company > Project |
 
 ## Framework Ships Empty
 
@@ -110,7 +110,7 @@ Same pattern for tool surfaces. Extensions augment `ClientContributions` and `Se
 
 | Package | What |
 |---|---|
-| `@ydtb/anvil-toolkit` | Tool/scope module system -- `defineTool`, `scope`, `defineClient`, `defineServer`, `createToolServer`, `toolEntry`, `assembleRoutes`, `createAnvilApp` |
+| `@ydtb/anvil-toolkit` | Tool/scope module system -- `defineTool`, `defineScope`, `defineClient`, `defineServer`, `createToolServer`, `toolEntry`, `assembleRoutes`, `createAnvilApp` |
 | `@ydtb/anvil-toolkit/build` | Build integration -- `toolkitModules` (virtual module generators for tool discovery) |
 
 ### Layer Packages
@@ -228,17 +228,9 @@ The toolkit build integration auto-discovers tools from your scope tree and gene
 ### Dev Server
 
 ```ts
-import { createDevServer } from '@ydtb/anvil-build'
-
-createDevServer({
-  serverEntry: './server/index.ts',
-  clientEntry: './client/main.tsx',
-  serverPort: 3001,
-  clientPort: 3000,
-})
+import { createDevMiddleware } from '@ydtb/anvil-build'
+// Middleware embedded in the server — see server setup
 ```
-
-One command starts Bun with file watching for the server and Vite with HMR for the client.
 
 ## Key Design Decisions
 

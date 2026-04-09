@@ -36,7 +36,7 @@ The composition root (`compose.config.ts`) is the single source of truth for you
 ```ts
 // compose.config.ts
 import { defineApp } from '@ydtb/anvil'
-import { scope } from '@ydtb/anvil-toolkit'
+import { defineScope } from '@ydtb/anvil-toolkit'
 import { pino } from '@ydtb/anvil-layer-pino'
 import { postgres } from '@ydtb/anvil-layer-postgres'
 
@@ -50,7 +50,7 @@ export default defineApp({
     database: postgres({ url: process.env.DATABASE_URL! }),
   },
 
-  scopes: scope({
+  scopes: defineScope({
     type: 'workspace',
     label: 'Workspace',
     urlPrefix: '/w/$scopeId',
@@ -119,16 +119,16 @@ defineApp({
 The toolkit adds the tool/scope module system on top of the framework. **Scopes** define your organizational hierarchy. Each scope is a data isolation and routing boundary. **Tools** are the unit of business functionality.
 
 ```ts
-import { scope } from '@ydtb/anvil-toolkit'
+import { defineScope } from '@ydtb/anvil-toolkit'
 
 // Add scopes to your app config
-scopes: scope({
+scopes: defineScope({
   type: 'system',
   label: 'System',
   urlPrefix: '/s',
   includes: [dashboard],
   children: [
-    scope({
+    defineScope({
       type: 'company',
       label: 'Company',
       urlPrefix: '/c/$scopeId',
@@ -541,14 +541,8 @@ import { scopeTree } from 'virtual:anvil/scope-tree'  // serialized scope hierar
 ### Dev Server
 
 ```ts
-import { createDevServer } from '@ydtb/anvil-build'
-
-createDevServer({
-  serverEntry: './server/index.ts',
-  clientEntry: './client/main.tsx',
-  serverPort: 3001,
-  clientPort: 3000,
-})
+import { createDevMiddleware } from '@ydtb/anvil-build'
+// Middleware embedded in the server — see server setup
 ```
 
 ### Vite Config Helper

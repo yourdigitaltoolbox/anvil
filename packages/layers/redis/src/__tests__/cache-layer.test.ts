@@ -10,7 +10,8 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest'
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
 import { createServer, getLayer, provideLayerResolver, provideHookSystem, provideContributions, provideLoggingLayerResolver } from '@ydtb/anvil-server'
 import { memory } from '../memory.ts'
 
@@ -46,7 +47,7 @@ describe('cache layer + createServer', () => {
     const config = defineApp({
       brand: { name: 'Cache Test' },
       layers: { cache: memory({ seed }) } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
     const server = createServer({ config, tools: [] })
     await server.start()

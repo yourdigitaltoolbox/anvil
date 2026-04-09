@@ -13,7 +13,8 @@
 
 import { describe, it, expect, afterEach } from 'vitest'
 import { Hono } from 'hono'
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
 import {
   createServer,
   getLayer,
@@ -69,7 +70,7 @@ describe('auth layer + createServer', () => {
       layers: {
         auth: mockAuth({ users: testUsers }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
     const server = createServer({ config, tools: [] })
     await server.start()
@@ -178,7 +179,7 @@ describe('auth middleware', () => {
       layers: {
         auth: mockAuth({ users: testUsers }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({
@@ -214,7 +215,7 @@ describe('auth middleware', () => {
       layers: {
         auth: mockAuth({ users: testUsers }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({
@@ -244,7 +245,7 @@ describe('auth middleware', () => {
       layers: {
         auth: mockAuth({ users: testUsers }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({
@@ -269,7 +270,7 @@ describe('auth middleware', () => {
       layers: {
         auth: mockAuth({ users: testUsers }),
       } as any,
-      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+      scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
     const server = createServer({

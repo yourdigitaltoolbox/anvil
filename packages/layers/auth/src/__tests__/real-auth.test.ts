@@ -14,7 +14,8 @@ import { describe, it, expect, afterEach } from 'vitest'
 import postgresJs from 'postgres'
 import { drizzle } from 'drizzle-orm/postgres-js'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
 import {
   createServer,
   getLayer,
@@ -74,7 +75,7 @@ async function createAuthServer() {
         },
       }),
     } as any,
-    scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
   })
 
   const server = createServer({ config, tools: [] })

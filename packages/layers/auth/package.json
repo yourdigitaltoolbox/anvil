@@ -20,6 +20,7 @@
     "effect": "^3.14.0"
   },
   "devDependencies": {
+    "@ydtb/anvil-toolkit": "workspace:*",
     "@ydtb/anvil-layer-postgres": "workspace:*",
     "@types/node": "^25.5.2",
     "typescript": "^5.8.0",
