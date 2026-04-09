@@ -10,7 +10,7 @@
  */
 
 import { Hono } from 'hono'
-import { defineTool, defineServer } from '../../packages/anvil/src/index.ts'
+import { defineTool, defineServer } from '../../packages/toolkit/src/index.ts'
 import { getLayer, getRequestContext } from '../../packages/server/src/index.ts'
 
 // ---------------------------------------------------------------------------

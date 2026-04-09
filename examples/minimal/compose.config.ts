@@ -5,7 +5,8 @@
  * This is the one file that tells you what the app is made of.
  */
 
-import { defineApp, scope } from '../../packages/anvil/src/index.ts'
+import { defineApp } from '../../packages/anvil/src/index.ts'
+import { scope } from '../../packages/toolkit/src/index.ts'
 import { pino } from '../../packages/layers/pino/src/index.ts'
 import { memoryStore } from './layer-store.ts'
 import { widgets } from './ext-widgets.ts'
