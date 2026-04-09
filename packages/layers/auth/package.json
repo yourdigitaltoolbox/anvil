@@ -1,0 +1,27 @@
+{
+  "name": "@ydtb/anvil-layer-auth",
+  "version": "0.0.1",
+  "description": "Authentication layer for Anvil — better-auth integration with plugin support",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./plugins": "./src/plugins.ts",
+    "./middleware": "./src/middleware.ts",
+    "./mock": "./src/mock.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ydtb/anvil": "workspace:*",
+    "@ydtb/anvil-server": "workspace:*",
+    "effect": "^3.14.0",
+    "better-auth": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  }
+}
