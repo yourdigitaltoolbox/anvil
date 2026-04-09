@@ -1,14 +1,15 @@
 /**
- * @ydtb/anvil-toolkit/core — toolkit exports without React/TSX dependencies.
+ * @ydtb/anvil-toolkit/core — universal toolkit exports.
  *
- * Safe to import from vite.config.ts and other Node.js contexts that
- * can't handle .tsx files. Includes everything except createAnvilApp
- * and assembleRoutes (which depend on React types).
+ * No server dependencies (no node:async_hooks, no Effect, no Hono).
+ * No React dependencies (no JSX).
+ * Safe to import from ANYWHERE: server, client, vite.config, compose.config.
+ *
+ * Contains only pure type/definition functions with zero side effects.
  *
  * @example
  * ```ts
- * // In vite.config.ts or compose.config.ts (Node context)
- * import { scope, defineTool } from '@ydtb/anvil-toolkit/core'
+ * import { scope, defineTool, defineClient, defineServer } from '@ydtb/anvil-toolkit/core'
  * ```
  */
 
@@ -23,24 +24,14 @@ export type { ToolDescriptor } from './define-tool.ts'
 export { scope } from './scope.ts'
 export type { ScopeDefinition, ScopeTree } from './scope.ts'
 
-// Client surface (types only — no React components)
+// Client surface
 export { defineClient } from './client.ts'
 export type { Client, ClientCore } from './client.ts'
 export type { RouteEntry, NavigationEntry, PermissionEntry, PermissionGroup } from './client.ts'
 
-// Server surface
+// Server surface (types + defineServer — no server runtime deps)
 export { defineServer } from './server.ts'
 export type { Server, ServerCore, ServerHooks } from './server.ts'
 
-// Tool server/worker wrappers
-export { createToolServer } from './create-tool-server.ts'
-export type { ToolServerConfig } from './create-tool-server.ts'
-export { createToolWorker } from './create-tool-worker.ts'
-export type { ToolWorkerConfig } from './create-tool-worker.ts'
-
-// Surface processor
-export { processSurfaces, toolEntry } from './surfaces.ts'
-export type { ToolEntry, ProcessedSurfaces } from './surfaces.ts'
-
-// Build utilities
+// Build utilities (pure functions, no server deps)
 export { collectTools, collectToolsWithScopes } from './collect-tools.ts'
