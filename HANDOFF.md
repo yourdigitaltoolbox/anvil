@@ -88,6 +88,46 @@ const [contact] = await db.select().from(contacts).where(eq(contacts.id, id))
 
 No Effect, no providers, no injection decorators. The tool just calls `getLayer` and gets back the concrete implementation that was configured in `compose.config.ts`. The ManagedRuntime is an implementation detail — if we ever wanted to swap Effect out for a simpler container, the `getLayer` API wouldn't change.
 
+**Q: Follow-up — does a module-level runtime create problems for tests (two servers in one process)?**
+
+Yes, this is a real concern. Module-level singletons work for production (one server per process) but tests are the pain point. YDTB already has this problem — `import { db } from '@ydtb/db'` returns the same singleton in every test file.
+
+**v0.1: Module-level singleton + test helper (ship this)**
+```ts
+// Production: one server, one runtime, module-level
+const server = createServer(config)
+server.start()
+
+// Tests: swap the runtime before each suite
+import { provideRuntime } from '@ydtb/anvil-server'
+beforeAll(() => provideRuntime(testRuntime))
+afterAll(() => provideRuntime(null))
+```
+
+**v0.2: Context-based with module-level fallback (upgrade path)**
+```ts
+// getLayer checks AsyncLocalStorage first, falls back to module-level
+export function getLayer<K extends keyof LayerMap>(key: K): LayerMap[K] {
+  const scoped = layerContext.getStore()
+  if (scoped) return scoped[key]
+  return globalRuntime.get(key)  // production path — zero overhead
+}
+
+// Tests wrap in a context scope:
+import { withLayers } from '@ydtb/anvil-server/test'
+it('creates a contact', async () => {
+  await withLayers(testLayers, async () => {
+    // getLayer('database') returns test DB inside this scope
+    const result = await createContact({ name: 'John' })
+    expect(result.name).toBe('John')
+  })
+})
+```
+
+The v0.2 approach also enables two servers in the same process — each wraps its request handling in its own `layerContext.run()`, resolving to the right runtime without global mutation.
+
+**Decision:** Build v0.1 (module-level). Design the `getLayer` function signature so it can be upgraded to v0.2 without changing any call sites — the API is the same, only internal resolution changes.
+
 **Q: What's the health-check contract for layers?**
 
 Each `LayerConfig` has an optional `_healthCheck` that returns a status object:
