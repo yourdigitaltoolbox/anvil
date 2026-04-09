@@ -25,7 +25,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ## Current State
 
-Seven packages built. 61 tests passing. Example app running end-to-end.
+**Core framework complete.** Eight packages built. 76 tests passing. Example app running end-to-end.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
 - Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
@@ -76,36 +76,44 @@ Seven packages built. 61 tests passing. Example app running end-to-end.
 - Health check runs `SELECT 1` with latency measurement
 - Defines `DatabaseLayer` contract (`{ db: PostgresJsDatabase, sql: Sql }`), augments `LayerMap`
 
+### `@ydtb/anvil-client` — ✅ DONE (15 tests)
+- `assembleRoutes(scopeTree, tools)` — pure function: scope tree + tool surfaces → scope-grouped route structure
+- `createApiClient(toolId)` — URL + headers builder with automatic scope injection
+- `configureApiClients()` — lazy global config, called once at boot
+- `useLayer(key)` / `LayerProvider` — client-side swappable services via React context
+- `ClientLayerMap` — empty interface, augmented via declaration merging (same pattern as server)
+- `useScope()` / `ScopeProvider` — current scope context from URL params
+- `getCurrentScope()` — module-level ref for non-React access (API headers)
+- Framework provides data + hooks, app owns the React rendering (TanStack Router setup, provider hierarchy)
+
 ### Example App — ✅ RUNNING
 - `examples/minimal/` — compose.config + layer + extension + tool + server entry
 - Demonstrates all five primitives working together
 - Runnable with `bun run examples/minimal/server.ts`, curlable endpoints
 
+## Surfaces vs Hooks (Client Communication)
+
+Tools use two complementary mechanisms for communication:
+
+| Concern | Mechanism | When |
+|---|---|---|
+| What a tool contributes (routes, nav, cards, search providers) | Surfaces + Extensions | Boot time, declarative, typed |
+| What happens when X occurs (events, reactions) | Hooks (broadcasts) | Runtime, event-driven |
+| Ask another tool to do something | Hooks (actions) | Runtime, request/response |
+| Transform data flowing through the system | Hooks (filters) | Runtime, pipeline |
+
+Surfaces handle **structural** communication (what a tool IS). Hooks handle **runtime** communication (what happens when something OCCURS). This replaces YDTB's "everything through hooks" pattern — hooks were being abused for collecting static data. Now each mechanism does what it's good at.
+
 ## What's Next
 
-### Priority 1: `@ydtb/anvil-client` — NOT STARTED
-The last major framework package. Makes Anvil full-stack.
+**The core framework is complete.** All five packages are built, tested, and pushed. Remaining work is incremental.
 
-Needs to provide:
-- **Client surface registration** — collects client surfaces from tools via virtual modules
-- **Scope-aware routing** — React routing from scope tree + tool route declarations (TanStack Router)
-- **`useLayer()`** — React hook for client-side layers (analytics, feature flags)
-- **`clientLayers`** on `defineApp` — swappable client-side services via React context
-- **API client factory** — typed oRPC clients per tool
-- **`LayerProvider`** — React context provider for test/Storybook mocking
-
-Reference YDTB files:
-- `packages/compose/src/registry.ts` — surface registration, plugin loader bridge
-- `packages/compose/src/client.ts` — API client factory
-- `packages/app/src/client/boot-client.tsx` — client bootstrap, scope contexts
-- `packages/app/src/client/createApp.tsx` — React app shell, route assembly
-
-### Priority 2: Server v0.2 enhancements
+### Priority 1: Server v0.2 enhancements
 - `createWorker(config)` — job processing without HTTP
 - Scope-aware SPA handler — branded HTML shell from URL parsing (Tier 1)
 - Sentry / error reporting — ErrorLayer integration
 
-### Priority 3: More layer packages
+### Priority 2: More layer packages
 Pattern is proven. Build as needed:
 - `@ydtb/anvil-layer-redis` — CacheLayer
 - `@ydtb/anvil-layer-bullmq` — JobLayer
@@ -113,7 +121,7 @@ Pattern is proven. Build as needed:
 - `@ydtb/anvil-layer-resend` — EmailLayer
 - `@ydtb/anvil-layer-s3` — StorageLayer
 
-### Priority 4: Extension packages (YDTB-specific)
+### Priority 3: Extension packages (YDTB-specific)
 Build during YDTB migration phase:
 - `@myapp/ext-onboarding`, `@myapp/ext-search`, `@myapp/ext-dashboard`
 - `@myapp/ext-notifications`, `@myapp/ext-credentials`, `@myapp/ext-activity`
@@ -481,8 +489,8 @@ The boundary is clean: Effect manages the lifecycle of infrastructure resources.
 **Q: Unresolved questions we're still mulling over?**
 
 - ~~**h3 vs Hono**~~ — **Decided: Hono.** Anvil is a standalone framework, not optimized for one consumer's migration. YDTB's direct h3 surface is small (SPA fallback, health endpoint, a few raw routes — most handlers are behind oRPC). Hono's Web Standard API, larger ecosystem, and runtime portability make it the cleaner foundation.
-- **How the virtual module plugin moves** — it's currently a Vite/Rollup plugin in YDTB. It needs to work in the new `@ydtb/anvil-build` package. The plugin code itself is standard Rollup (resolveId + load hooks), so it should move cleanly — but the dev server story (Vite for client + separate server process) needs design work.
-- **Client-side layer delivery** — `useLayer('analytics')` in React components needs a provider. We discussed React context, but haven't designed the provider hierarchy or how it interacts with SSR.
+- ~~**How the virtual module plugin moves**~~ — **RESOLVED (Session 2).** Built `@ydtb/anvil-build` with `anvilPlugin(config)`. Standard Rollup resolveId + load hooks. Generates 6 virtual modules. 16 tests passing. Dev server story still needs design work.
+- ~~**Client-side layer delivery**~~ — **RESOLVED (Session 2).** Built `useLayer(key)` + `LayerProvider` in `@ydtb/anvil-client`. React context with `ClientLayerMap` augmented via declaration merging. Same extensibility pattern as server layers.
 - **How tool `requires` field gets verified at compile time (Level 2)** — the virtual module plugin collects all tools' `requires` arrays. The union of all requirements must be a subset of the keys in `config.layers`. This needs type-level magic in the virtual module output. Not designed yet.
 
 **Q: Known gotchas in YDTB that affect extraction?**
@@ -495,7 +503,7 @@ The boundary is clean: Effect manages the lifecycle of infrastructure resources.
 
 4. ~~**The `BroadcastOptions` type**~~ — **RESOLVED (Session 2).** Removed hardcoded YDTB-specific activity/notification side-channels. Replaced with generic `registerSideChannel(optionKey, config)` mechanism. Side-channels are now app-defined, not framework-defined. 27 tests passing including side-channel error handling.
 
-5. **YDTB's virtual module plugin reads `app.config.ts`** which uses YDTB-specific types (`AppConfig`). Anvil's version needs to read `compose.config.ts` which uses Anvil's `AppConfig` (from `defineApp`). The plugin logic is the same but the config shape differs. **Decision: Not a v0.1 concern.** This is `anvil-build` scope. Fix is straightforward — make the plugin generic over the config type.
+5. ~~**YDTB's virtual module plugin reads `app.config.ts`**~~ — **RESOLVED (Session 2).** Built `@ydtb/anvil-build` with `anvilPlugin(config)` that reads Anvil's `AppConfig` from `compose.config.ts`. Plugin is generic — reads scope tree, discovers tools, generates virtual modules. 16 tests passing.
 
 ## Prior Art Research
 
@@ -536,9 +544,17 @@ Frameworks reviewed during Session 1, ranked by architectural similarity:
 - **Integration test passing** — 4 tests proving full boot→request→shutdown cycle: Effect layer resolution, getLayer/getHooks/getRequestContext, health endpoints, tool hook registration, shutdown cleanup.
 - Updated DESIGN.md to reflect five-primitive model, empty-by-default extensibility, extensions section, updated package map, migration path
 
-**Philosophy established:** No rush. YDTB is running. Build the next generation right, not fast. Clean approach over quick approach. Don't half-bake, don't copy from YDTB, don't optimize for YDTB's migration.
+**Continued building — completed all core framework packages:**
+- **Route mounting** — Hono sub-apps at `/api/{toolId}/*`. `fromOrpc()` helper for oRPC.
+- **DX helpers** — `getContributions()`, `createLayerConfig()`, `toolEntry()`
+- **`@ydtb/anvil-layer-pino`** — first real layer. Pino factory + silent test variant. Integrated with getLogger(). 7 tests.
+- **`@ydtb/anvil-layer-postgres`** — real database layer with Effect acquireRelease lifecycle. Connection pool + Drizzle ORM + health check. Tested against real Postgres. 4 tests.
+- **Example app** — minimal compose.config + layer + extension + tool + server entry. All five primitives working, curlable.
+- **`@ydtb/anvil-build`** — virtual module plugin. anvilPlugin(config) generates 6 virtual modules from compose.config. collectTools() with deduplication. 16 tests.
+- **`@ydtb/anvil-client`** — client runtime. assembleRoutes(), createApiClient(), useLayer/LayerProvider, useScope/ScopeProvider. 15 tests.
+- **Surfaces vs Hooks** clarified — surfaces for structural (what a tool IS), hooks for runtime (what happens when X OCCURS). Replaces YDTB's "everything through hooks" pattern.
 
-**What's next:** Route mounting (actually mounting tool/extension routers to Hono), HTTP listener (port binding), oRPC integration design, more tests.
+**Session 2 totals:** 8 packages, 76 tests, ~6,200 lines, 8 commits pushed to remote. Core framework complete.
 
 ### Session 1 (2026-04-08)
 - Reviewed Effect-TS as potential infrastructure layer — decided to use internally in server, not expose to tools
