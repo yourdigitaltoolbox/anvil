@@ -60,5 +60,5 @@ export { createLayerConfig, createLayerConfigWithTag } from './layer-helpers.ts'
 export { getLayerTag } from './layer-tags.ts'
 
 // Test helpers
-export { provideLayerResolver, provideHookSystem, provideContributions } from './accessors.ts'
+export { provideLayerResolver, provideHookSystem, provideContributions, withLayers } from './accessors.ts'
 export { provideLoggingLayerResolver } from './request-context.ts'

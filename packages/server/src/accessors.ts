@@ -1,12 +1,12 @@
 /**
- * Framework accessors — getLayer(), getHooks()
+ * Framework accessors — getLayer(), getHooks(), getContributions()
  *
- * Module-level singletons set during createServer() boot.
- * Tools call these to access infrastructure and the hook system.
+ * v0.2: Check AsyncLocalStorage first, fall back to module-level.
+ * This enables test isolation (two servers in one process) and
+ * per-request scoped resolution.
  *
- * v0.1: Module-level singleton.
- * v0.2 upgrade path: Check AsyncLocalStorage first, fall back to module-level.
- * The API won't change — only internal resolution.
+ * The API hasn't changed — tools still call getLayer('database').
+ * Only the internal resolution strategy changed.
  *
  * ```ts
  * import { getLayer, getHooks } from '@ydtb/anvil-server'
@@ -16,25 +16,83 @@
  * ```
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import type { LayerMap } from '@ydtb/anvil'
 import type { HookSystem } from '@ydtb/anvil-hooks'
+
+// ---------------------------------------------------------------------------
+// Scoped context — AsyncLocalStorage for test isolation
+// ---------------------------------------------------------------------------
+
+interface ScopedContext {
+  layerResolver: (<K extends keyof LayerMap>(key: K) => LayerMap[K]) | null
+  hookSystem: HookSystem | null
+  contributions: Record<string, unknown[]>
+}
+
+const scopedContext = new AsyncLocalStorage<ScopedContext>()
+
+/**
+ * Run a function with scoped accessors. Used for test isolation —
+ * each test can have its own layer resolver, hook system, and contributions
+ * without affecting other tests running in the same process.
+ *
+ * @example
+ * ```ts
+ * import { withLayers } from '@ydtb/anvil-server'
+ *
+ * it('creates a contact', async () => {
+ *   await withLayers(testServer, async () => {
+ *     // getLayer('database') returns this test's DB
+ *     const result = await createContact({ name: 'John' })
+ *     expect(result.name).toBe('John')
+ *   })
+ * })
+ * ```
+ */
+export function withLayers(
+  context: {
+    layerResolver?: (<K extends keyof LayerMap>(key: K) => LayerMap[K]) | null
+    hookSystem?: HookSystem | null
+    contributions?: Record<string, unknown[]>
+  },
+  fn: () => Promise<void> | void,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    scopedContext.run(
+      {
+        layerResolver: context.layerResolver ?? null,
+        hookSystem: context.hookSystem ?? null,
+        contributions: context.contributions ?? {},
+      },
+      async () => {
+        try {
+          await fn()
+          resolve()
+        } catch (e) {
+          reject(e)
+        }
+      },
+    )
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Module-level fallback (production path — zero overhead)
+// ---------------------------------------------------------------------------
+
+let _layerResolver: (<K extends keyof LayerMap>(key: K) => LayerMap[K]) | null = null
+let _hookSystem: HookSystem | null = null
+let _contributions: Record<string, unknown[]> = {}
 
 // ---------------------------------------------------------------------------
 // Layer Runtime
 // ---------------------------------------------------------------------------
 
 /**
- * Internal layer resolution function.
- * Set by the lifecycle manager during boot. Returns the concrete layer
- * implementation for a given key.
- */
-let _layerResolver: (<K extends keyof LayerMap>(key: K) => LayerMap[K]) | null = null
-
-/**
- * Provide the layer resolver. Called internally by createServer() after
- * the ManagedRuntime is created and all resources are acquired.
- *
- * @internal — not part of the public API for tool authors
+ * Provide the layer resolver at module level.
+ * Called internally by createServer() after boot.
+ * @internal
  */
 export function provideLayerResolver(
   resolver: (<K extends keyof LayerMap>(key: K) => LayerMap[K]) | null
@@ -46,16 +104,21 @@ export function provideLayerResolver(
  * Access a layer by key. Returns the concrete implementation configured
  * in compose.config.ts.
  *
+ * Resolution order:
+ * 1. AsyncLocalStorage scoped context (for test isolation)
+ * 2. Module-level resolver (production path)
+ *
  * Synchronous — resources are guaranteed to be acquired during boot.
  * Throws if called before createServer() boots layers.
- *
- * @example
- * ```ts
- * const { db } = getLayer('database')
- * const { logger } = getLayer('logging')
- * ```
  */
 export function getLayer<K extends keyof LayerMap>(key: K): LayerMap[K] {
+  // Check scoped context first (test isolation)
+  const scoped = scopedContext.getStore()
+  if (scoped?.layerResolver) {
+    return scoped.layerResolver(key)
+  }
+
+  // Fall back to module-level
   if (!_layerResolver) {
     throw new Error(
       `[anvil-server] Layers not available — createServer() has not booted yet. ` +
@@ -69,29 +132,27 @@ export function getLayer<K extends keyof LayerMap>(key: K): LayerMap[K] {
 // Hook System
 // ---------------------------------------------------------------------------
 
-let _hookSystem: HookSystem | null = null
-
 /**
- * Provide the HookSystem instance. Called internally by createServer() during boot.
- *
- * @internal — not part of the public API for tool authors
+ * Provide the HookSystem instance at module level.
+ * @internal
  */
 export function provideHookSystem(hooks: HookSystem | null): void {
   _hookSystem = hooks
 }
 
 /**
- * Access the hook system. Returns the HookSystem instance created during boot.
+ * Access the hook system.
  *
- * Throws if called before createServer() boots.
- *
- * @example
- * ```ts
- * const hooks = getHooks()
- * await hooks.doAction('contacts:get', { id: 'ct_123' })
- * ```
+ * Resolution order:
+ * 1. AsyncLocalStorage scoped context
+ * 2. Module-level singleton
  */
 export function getHooks(): HookSystem {
+  const scoped = scopedContext.getStore()
+  if (scoped?.hookSystem) {
+    return scoped.hookSystem
+  }
+
   if (!_hookSystem) {
     throw new Error(
       `[anvil-server] Hook system not available — createServer() has not booted yet. ` +
@@ -105,12 +166,8 @@ export function getHooks(): HookSystem {
 // Extension Contributions
 // ---------------------------------------------------------------------------
 
-let _contributions: Record<string, unknown[]> = {}
-
 /**
- * Provide collected extension contributions. Called internally by
- * createServer() after processing surfaces.
- *
+ * Provide collected extension contributions at module level.
  * @internal
  */
 export function provideContributions(contributions: Record<string, unknown[]> | null): void {
@@ -120,22 +177,14 @@ export function provideContributions(contributions: Record<string, unknown[]> | 
 /**
  * Access collected contributions for an extension.
  *
- * Extensions call this in their route handlers or hooks to retrieve
- * the data that tools contributed to them via server surfaces.
- *
- * @param extensionId - The extension's id (e.g. 'widgets', 'search')
- * @returns Array of contribution objects from all tools, typed via generic
- *
- * @example
- * ```ts
- * import { getContributions } from '@ydtb/anvil-server'
- * import type { WidgetEntry } from './types'
- *
- * // In an extension's route handler:
- * const widgets = getContributions<{ items: WidgetEntry[] }>('widgets')
- * // Returns: [{ toolId: 'greeter', items: [...] }, { toolId: 'billing', items: [...] }]
- * ```
+ * Resolution order:
+ * 1. AsyncLocalStorage scoped context
+ * 2. Module-level store
  */
 export function getContributions<T = unknown>(extensionId: string): Array<T & { toolId: string }> {
+  const scoped = scopedContext.getStore()
+  if (scoped) {
+    return (scoped.contributions[extensionId] ?? []) as Array<T & { toolId: string }>
+  }
   return (_contributions[extensionId] ?? []) as Array<T & { toolId: string }>
 }

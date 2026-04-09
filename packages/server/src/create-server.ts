@@ -47,13 +47,36 @@ import { getLayer } from './accessors.ts'
 // Config
 // ---------------------------------------------------------------------------
 
+/**
+ * Middleware entry — either a plain Hono handler or a named/prioritized entry.
+ *
+ * Plain handlers run in array order. Named entries are sorted by priority
+ * (lower = runs first) before being installed.
+ */
+export type MiddlewareEntry =
+  | MiddlewareHandler
+  | { id: string; handler: MiddlewareHandler; priority?: number }
+
 export interface ServerConfig {
   /** The app composition config from defineApp() */
   config: AppConfig
   /** Tool entries — typically from virtual:app/server-tools */
   tools: ToolEntry[]
-  /** Hono middleware to run on every request (CORS, auth, rate limiting, etc.) */
-  middleware?: MiddlewareHandler[]
+  /**
+   * Hono middleware to run on every request.
+   *
+   * Accepts either plain handlers (run in array order) or named entries
+   * with priority ordering (lower priority number = runs first):
+   *
+   * ```ts
+   * middleware: [
+   *   { id: 'auth', handler: authMiddleware(), priority: 10 },
+   *   { id: 'scope', handler: scopeMiddleware(), priority: 20 },
+   *   cors(),  // plain handler — runs after all prioritized entries
+   * ]
+   * ```
+   */
+  middleware?: MiddlewareEntry[]
   /** App-level server routes (not tools, not extensions) */
   routes?: Record<string, unknown>
   /** Port to listen on (default: 3000) */
