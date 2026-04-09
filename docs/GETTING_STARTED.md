@@ -1,6 +1,6 @@
 # Getting Started with Anvil
 
-Anvil is a composable full-stack plugin framework. You build applications from independent **tools** (business features), connected by **hooks** (runtime communication), powered by swappable **layers** (infrastructure), and enriched by **extensions** (platform systems).
+Anvil is a composable full-stack framework for building extensible applications. The framework provides the generic foundation -- **layers** (swappable infrastructure), **hooks** (runtime communication), and **extensions** (platform systems). **Toolkits** define module systems on top of it. `@ydtb/anvil-toolkit` provides the **tool/scope pattern** where independent **tools** (business features) are organized into a **scope** hierarchy.
 
 ## Quick Start
 
@@ -17,6 +17,12 @@ Install the core framework:
 bun add @ydtb/anvil @ydtb/anvil-server @ydtb/anvil-hooks
 ```
 
+Install the toolkit (for tool/scope module system):
+
+```bash
+bun add @ydtb/anvil-toolkit
+```
+
 Install the layers you need:
 
 ```bash
@@ -29,7 +35,8 @@ The composition root (`compose.config.ts`) is the single source of truth for you
 
 ```ts
 // compose.config.ts
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { scope } from '@ydtb/anvil-toolkit'
 import { pino } from '@ydtb/anvil-layer-pino'
 import { postgres } from '@ydtb/anvil-layer-postgres'
 
@@ -63,7 +70,6 @@ import config from '../compose.config'
 
 const server = createServer({
   config,
-  tools: [],
   port: 3000,
 })
 
@@ -92,24 +98,30 @@ curl http://localhost:3000/readyz      # → { "status": "ok", "checks": { ... }
 
 ---
 
-## Five Primitives
+## Core Primitives
 
-### 1. Composition (`defineApp`, `scope`)
+### 1. Composition (`defineApp`)
 
-The composition root declares everything:
+The composition root declares your application's infrastructure and extensions:
 
 ```ts
+import { defineApp } from '@ydtb/anvil'
+
 defineApp({
   brand: { name, logo?, primaryColor? },
   layers: { ... },          // Infrastructure
-  scopes: scope({ ... }),   // Organizational hierarchy
   extensions?: [ ... ],     // Platform systems
 })
 ```
 
-**Scopes** define your organizational hierarchy. Each scope is a data isolation and routing boundary:
+### 2. Tools and Scopes (via `@ydtb/anvil-toolkit`)
+
+The toolkit adds the tool/scope module system on top of the framework. **Scopes** define your organizational hierarchy. Each scope is a data isolation and routing boundary. **Tools** are the unit of business functionality.
 
 ```ts
+import { scope } from '@ydtb/anvil-toolkit'
+
+// Add scopes to your app config
 scopes: scope({
   type: 'system',
   label: 'System',
@@ -126,13 +138,11 @@ scopes: scope({
 })
 ```
 
-### 2. Tools (`defineTool`, `defineClient`, `defineServer`)
-
-Tools are the unit of business functionality. Each tool is a package with three exports:
+Each tool is a package with three exports -- all from `@ydtb/anvil-toolkit`:
 
 ```ts
 // tools/contacts/index.ts
-import { defineTool } from '@ydtb/anvil'
+import { defineTool } from '@ydtb/anvil-toolkit'
 
 export const contacts = defineTool({
   id: 'contacts',
@@ -141,11 +151,11 @@ export const contacts = defineTool({
 })
 ```
 
-**Server surface** — what the tool contributes to the server:
+**Server surface** -- what the tool contributes to the server:
 
 ```ts
 // tools/contacts/server.ts
-import { defineServer } from '@ydtb/anvil'
+import { defineServer } from '@ydtb/anvil-toolkit'
 import { Hono } from 'hono'
 import { getLayer } from '@ydtb/anvil-server'
 
@@ -173,11 +183,11 @@ export default defineServer({
 })
 ```
 
-**Client surface** — what the tool contributes to the browser:
+**Client surface** -- what the tool contributes to the browser:
 
 ```ts
 // tools/contacts/client.ts
-import { defineClient } from '@ydtb/anvil'
+import { defineClient } from '@ydtb/anvil-toolkit'
 
 export default defineClient({
   routes: [
@@ -295,7 +305,7 @@ const filtered = await hooks.applyFilter('contacts:list', allContacts)
 
 ### 5. Extensions
 
-App-level systems that define contracts for tools to contribute to:
+App-level systems that define contracts for modules to contribute to:
 
 ```ts
 // extensions/search/index.ts
@@ -324,10 +334,12 @@ declare module '@ydtb/anvil' {
 }
 ```
 
-Tools contribute to installed extensions:
+Tools contribute to installed extensions (using toolkit imports):
 
 ```ts
 // tools/contacts/server.ts
+import { defineServer } from '@ydtb/anvil-toolkit'
+
 export default defineServer({
   router,
   search: { provider: contactSearchProvider },  // Appears when search extension is installed
@@ -363,7 +375,7 @@ logger.info('Processing request')
 
 ### Middleware
 
-App-level middleware is passed to `createServer`:
+App-level middleware is passed to `createServer` (or `createToolServer` from the toolkit):
 
 ```ts
 createServer({
@@ -414,20 +426,18 @@ Same layers and hooks, no HTTP:
 ```ts
 import { createWorker } from '@ydtb/anvil-server'
 
-const worker = createWorker({ config, tools })
+const worker = createWorker({ config })
 await worker.start()
-
-const jobs = worker.getJobs()  // all registered job definitions
 ```
 
 ---
 
 ## Client Features
 
-### Route Assembly
+### Route Assembly (toolkit)
 
 ```ts
-import { assembleRoutes } from '@ydtb/anvil-client'
+import { assembleRoutes } from '@ydtb/anvil-toolkit'
 
 const routeMap = assembleRoutes(scopeTree, toolClientSurfaces)
 // routeMap.scopes — nested scope groups with routes + navigation
@@ -486,10 +496,10 @@ import { AuthProvider, useAuth, AuthGate } from '@ydtb/anvil-client'
 const { user, isAuthenticated, signOut } = useAuth()
 ```
 
-### App Helper
+### App Helper (toolkit)
 
 ```tsx
-import { createAnvilApp } from '@ydtb/anvil-client'
+import { createAnvilApp } from '@ydtb/anvil-toolkit'
 
 const { App } = createAnvilApp({
   scopeTree,
@@ -507,15 +517,16 @@ createRoot(document.getElementById('app')!).render(<App />)
 
 ### Virtual Module Plugin
 
-Auto-discovers tools from compose.config and generates virtual modules:
+The framework build package provides the Vite/Rollup plugin infrastructure. The toolkit adds virtual module generators for tool discovery:
 
 ```ts
 // vite.config.ts
 import { anvilPlugin } from '@ydtb/anvil-build'
+import { toolkitModules } from '@ydtb/anvil-toolkit/build'
 import config from './compose.config'
 
 export default defineConfig({
-  plugins: [anvilPlugin(config)],
+  plugins: [anvilPlugin(config, { virtualModules: toolkitModules(config) })],
 })
 ```
 
@@ -544,10 +555,12 @@ createDevServer({
 
 ```ts
 import { createViteConfig } from '@ydtb/anvil-build'
+import { toolkitModules } from '@ydtb/anvil-toolkit/build'
 
 export default createViteConfig({
   appConfig: config,
   serverPort: 3001,
+  virtualModules: toolkitModules(config),
 })
 ```
 

@@ -1,74 +1,40 @@
 # Anvil API Reference
 
-## `@ydtb/anvil` — Core Types
+## `@ydtb/anvil` -- Core Types
+
+The core package provides the generic framework primitives. It has no knowledge of tools or scopes -- those come from toolkits.
 
 ### Functions
 
 | Function | Signature | Description |
 |---|---|---|
 | `defineApp` | `(config: AppConfig) => AppConfig` | Define the composition root |
-| `defineTool` | `(descriptor: ToolDescriptor) => ToolDescriptor` | Declare a tool's identity |
-| `scope` | `(definition: ScopeDefinition) => ScopeDefinition` | Define a scope in the hierarchy |
-| `defineClient` | `(definition: Client) => Client` | Define a tool's client surface |
-| `defineServer` | `(definition: Server) => Server` | Define a tool's server surface |
 | `defineExtension` | `(config: Extension) => Extension` | Define an extension |
 
 ### Types
 
-**`AppConfig`** — Composition root configuration
-- `brand: BrandConfig` — name, logo, primaryColor
-- `layers: RequiredLayers` — infrastructure layer configs (derived from installed packages)
-- `scopes: ScopeTree` — nested scope hierarchy
-- `extensions?: Extension[]` — registered extensions
+**`AppConfig`** -- Composition root configuration
+- `brand: BrandConfig` -- name, logo, primaryColor
+- `layers: RequiredLayers` -- infrastructure layer configs (derived from installed packages)
+- `extensions?: Extension[]` -- registered extensions
 
-**`ToolDescriptor`** — Tool identity
-- `id: string` — unique identifier
-- `name: string` — display name
-- `package: string` — package name for import resolution
-
-**`ScopeDefinition`** — Scope in the hierarchy
-- `type: string` — scope type identifier
-- `label: string` — display label
-- `urlPrefix: string` — URL pattern (supports `$scopeId` dynamic segments)
-- `includes?: ToolDescriptor[]` — tools available at this scope level
-- `children?: ScopeDefinition[]` — child scope types
-
-**`Client`** = `ClientCore & ClientContributions` — Full client surface type
-- `routes?: RouteEntry[]` — scoped routes
-- `navigation?: NavigationEntry[]` — sidebar entries
-- `permissions?: PermissionGroup[]` — permission declarations
-- `publicRoutes?: RouteEntry[]` — no auth required
-- `fullscreenRoutes?: RouteEntry[]` — no scope chrome
-- `authenticatedRoutes?: RouteEntry[]` — auth required, no scope
-- `setup?: (ctx) => void` — escape hatch
-- Plus any fields from `ClientContributions` (augmented by extensions)
-
-**`Server`** = `ServerCore & ServerContributions` — Full server surface type
-- `schema?: Record<string, unknown>` — Drizzle table definitions
-- `router?: Hono` — Hono sub-app (or use `fromOrpc()`)
-- `hooks?: ServerHooks` — actions, broadcasts, filters
-- `jobs?: JobDefinition[]` — background job definitions
-- `requires?: readonly string[]` — required layer keys
-- `setup?: (ctx) => void` — escape hatch
-- Plus any fields from `ServerContributions` (augmented by extensions)
-
-**`Extension`** — Extension definition
-- `id: string` — unique identifier
-- `name: string` — display name
-- `client?: Client` — extension's own client surface
-- `server?: Server` — extension's own server surface
+**`Extension`** -- Extension definition
+- `id: string` -- unique identifier
+- `name: string` -- display name
+- `client?: ExtensionClient` -- extension's own client surface
+- `server?: ExtensionServer` -- extension's own server surface
 
 ### Extensible Interfaces (empty by default, augmented via declaration merging)
 
 | Interface | Augmented by | Purpose |
 |---|---|---|
 | `LayerMap` | Layer packages | Define infrastructure contracts |
-| `ClientContributions` | Extension packages | Tool client contribution fields |
-| `ServerContributions` | Extension packages | Tool server contribution fields |
+| `ClientContributions` | Extension packages | Module client contribution fields |
+| `ServerContributions` | Extension packages | Module server contribution fields |
 
 ---
 
-## `@ydtb/anvil-server` — Server Runtime
+## `@ydtb/anvil-server` -- Server Runtime
 
 ### Functions
 
@@ -81,10 +47,9 @@
 | `getHooks()` | Access the HookSystem instance |
 | `getContributions(extensionId)` | Access collected extension contributions |
 | `getRequestContext()` | Access per-request state (requestId, userId, scopeId, logger) |
-| `getLogger()` | Get the current logger (request context → LogLayer → console fallback) |
+| `getLogger()` | Get the current logger (request context -> LogLayer -> console fallback) |
 | `getLayerTag(key)` | Get/create a shared Effect tag for inter-layer dependencies |
 | `createLayerConfig(id, layer, opts?)` | Create a typed LayerConfig (for layer authors) |
-| `toolEntry(id, surface)` | Convenience helper for manual tool wiring |
 | `fromOrpc(router)` | Wrap an oRPC handler in a Hono sub-app |
 | `provideLayerResolver(resolver)` | Test helper: swap layer resolver |
 | `provideHookSystem(hooks)` | Test helper: swap hook system |
@@ -96,7 +61,6 @@
 ```ts
 {
   config: AppConfig        // from defineApp()
-  tools: ToolEntry[]       // tool server surfaces
   middleware?: MiddlewareHandler[]  // Hono middleware
   routes?: Record<string, Hono>    // app-level routes
   port?: number            // default: 3000
@@ -108,7 +72,6 @@
 ```ts
 {
   config: AppConfig
-  tools: ToolEntry[]
   onJob?: (job: JobDefinition) => Promise<void>
 }
 ```
@@ -176,7 +139,7 @@ Returns typed wrappers with compile-time checked event names and payload shapes.
 
 ---
 
-## `@ydtb/anvil-build` — Build System
+## `@ydtb/anvil-build` -- Build System
 
 ### Functions
 
@@ -185,32 +148,19 @@ Returns typed wrappers with compile-time checked event names and payload shapes.
 | `anvilPlugin(config, options?)` | Vite/Rollup plugin for virtual modules |
 | `createDevServer(config)` | Start dev server (Bun --watch + Vite) |
 | `createViteConfig(options)` | Pre-configured Vite config with Anvil plugin + proxy |
-| `collectTools(config)` | Extract deduplicated tool list from scope tree |
-| `collectToolsWithScopes(config)` | Tools with their scope type memberships |
 
-### Virtual Modules
-
-| Module | Exports | Description |
-|---|---|---|
-| `virtual:anvil/server-tools` | `tools: ToolEntry[]` | All tool server surfaces |
-| `virtual:anvil/client-tools` | `tools: ClientToolEntry[]` | All tool client surfaces |
-| `virtual:anvil/schema` | `schema: Record<string, unknown>` | Merged schema for drizzle-kit |
-| `virtual:anvil/scope-tree` | `scopeTree: VirtualScopeNode` | Serialized scope hierarchy |
-| `virtual:anvil/permissions` | `permissions: PermissionGroup[]` | All tool permissions |
-| `virtual:anvil/extensions` | `extensions: { id, name }[]` | Extension metadata |
+The build package provides the plugin infrastructure. Virtual module generators are supplied by toolkits (see `@ydtb/anvil-toolkit/build` below).
 
 ---
 
-## `@ydtb/anvil-client` — Client Runtime
+## `@ydtb/anvil-client` -- Client Runtime
 
 ### Functions
 
 | Function | Description |
 |---|---|
-| `assembleRoutes(scopeTree, tools)` | Build scope-grouped route structure |
 | `createApiClient(toolId)` | Create URL + headers builder for a tool's API |
 | `configureApiClients(config)` | Set global API client config (call once at boot) |
-| `createAnvilApp(config)` | Assemble a mountable React app |
 | `getCurrentScope()` | Get current scope outside React (for API headers) |
 
 ### React Hooks & Components
@@ -236,6 +186,77 @@ declare module '@ydtb/anvil-client' {
   }
 }
 ```
+
+---
+
+## `@ydtb/anvil-toolkit` -- Tool/Scope Module System
+
+The toolkit package provides the YDTB tool/scope module system on top of the generic Anvil framework. It defines how business features (tools) are declared, organized into scopes, and wired into the server and client.
+
+### Functions
+
+| Function | Import | Description |
+|---|---|---|
+| `defineTool(descriptor)` | `@ydtb/anvil-toolkit` | Declare a tool's identity (id, name, package) |
+| `scope(definition)` | `@ydtb/anvil-toolkit` | Define a scope in the organizational hierarchy |
+| `defineClient(definition)` | `@ydtb/anvil-toolkit` | Define a tool's client surface (routes, navigation, permissions) |
+| `defineServer(definition)` | `@ydtb/anvil-toolkit` | Define a tool's server surface (router, hooks, jobs, schema) |
+| `createToolServer(config)` | `@ydtb/anvil-toolkit` | Create a server with tool surface processing (extends `createServer`) |
+| `toolEntry(id, surface)` | `@ydtb/anvil-toolkit` | Convenience helper for manual tool wiring |
+| `assembleRoutes(scopeTree, tools)` | `@ydtb/anvil-toolkit` | Build scope-grouped route structure for the client |
+| `createAnvilApp(config)` | `@ydtb/anvil-toolkit` | Assemble a mountable React app with tools, scopes, and auth |
+| `collectTools(config)` | `@ydtb/anvil-toolkit` | Extract deduplicated tool list from scope tree |
+| `collectToolsWithScopes(config)` | `@ydtb/anvil-toolkit` | Tools with their scope type memberships |
+
+### Types
+
+**`ToolDescriptor`** -- Tool identity
+- `id: string` -- unique identifier
+- `name: string` -- display name
+- `package: string` -- package name for import resolution
+
+**`ScopeDefinition`** -- Scope in the hierarchy
+- `type: string` -- scope type identifier
+- `label: string` -- display label
+- `urlPrefix: string` -- URL pattern (supports `$scopeId` dynamic segments)
+- `includes?: ToolDescriptor[]` -- tools available at this scope level
+- `children?: ScopeDefinition[]` -- child scope types
+
+**`Client`** = `ClientCore & ClientContributions` -- Full client surface type
+- `routes?: RouteEntry[]` -- scoped routes
+- `navigation?: NavigationEntry[]` -- sidebar entries
+- `permissions?: PermissionGroup[]` -- permission declarations
+- `publicRoutes?: RouteEntry[]` -- no auth required
+- `fullscreenRoutes?: RouteEntry[]` -- no scope chrome
+- `authenticatedRoutes?: RouteEntry[]` -- auth required, no scope
+- `setup?: (ctx) => void` -- escape hatch
+- Plus any fields from `ClientContributions` (augmented by extensions)
+
+**`Server`** = `ServerCore & ServerContributions` -- Full server surface type
+- `schema?: Record<string, unknown>` -- Drizzle table definitions
+- `router?: Hono` -- Hono sub-app (or use `fromOrpc()`)
+- `hooks?: ServerHooks` -- actions, broadcasts, filters
+- `jobs?: JobDefinition[]` -- background job definitions
+- `requires?: readonly string[]` -- required layer keys
+- `setup?: (ctx) => void` -- escape hatch
+- Plus any fields from `ServerContributions` (augmented by extensions)
+
+### `@ydtb/anvil-toolkit/build` -- Build Integration
+
+| Function | Description |
+|---|---|
+| `toolkitModules(config)` | Generate virtual module definitions for tool discovery |
+
+### Virtual Modules (provided by toolkit)
+
+| Module | Exports | Description |
+|---|---|---|
+| `virtual:anvil/server-tools` | `tools: ToolEntry[]` | All tool server surfaces |
+| `virtual:anvil/client-tools` | `tools: ClientToolEntry[]` | All tool client surfaces |
+| `virtual:anvil/schema` | `schema: Record<string, unknown>` | Merged schema for drizzle-kit |
+| `virtual:anvil/scope-tree` | `scopeTree: VirtualScopeNode` | Serialized scope hierarchy |
+| `virtual:anvil/permissions` | `permissions: PermissionGroup[]` | All tool permissions |
+| `virtual:anvil/extensions` | `extensions: { id, name }[]` | Extension metadata |
 
 ---
 

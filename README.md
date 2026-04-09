@@ -1,6 +1,6 @@
 # Anvil
 
-A composable full-stack plugin framework. Build multi-tenant, scope-aware applications from independent tool packages with swappable infrastructure and extensible platform systems.
+A composable full-stack framework for building extensible applications with swappable infrastructure and pluggable module systems. Anvil provides the generic foundation -- toolkits define the module patterns on top of it.
 
 ## What It Does
 
@@ -8,7 +8,8 @@ Anvil lets you compose an application from independent pieces:
 
 ```ts
 // compose.config.ts — one file declares your entire app
-import { defineApp, scope } from '@ydtb/anvil'
+import { defineApp } from '@ydtb/anvil'
+import { scope } from '@ydtb/anvil-toolkit'
 import { postgres } from '@ydtb/anvil-layer-postgres'
 import { pino } from '@ydtb/anvil-layer-pino'
 import { betterAuth } from '@ydtb/anvil-layer-auth'
@@ -31,11 +32,11 @@ export default defineApp({
 })
 ```
 
-Tools are self-contained business features. Each exports what it contributes to the server and client:
+Tools are self-contained business features defined via `@ydtb/anvil-toolkit`. Each exports what it contributes to the server and client:
 
 ```ts
 // tools/contacts/server.ts
-import { defineServer } from '@ydtb/anvil'
+import { defineServer } from '@ydtb/anvil-toolkit'
 import { Hono } from 'hono'
 import { getLayer } from '@ydtb/anvil-server'
 
@@ -62,15 +63,23 @@ database: postgres({ url: 'postgresql://localhost:5432/dev', pool: 5 }),
 database: testPostgres({ url: process.env.TEST_DATABASE_URL! }),
 ```
 
-## Five Primitives
+## Core Primitives
 
 | Primitive | What | Example |
 |---|---|---|
-| **Composition** | `defineApp` + `scope` — the single source of truth | Brand, layers, scope hierarchy, tool includes |
-| **Tools** | `defineClient` + `defineServer` — business features | Contacts, billing, team — each a self-contained package |
+| **Composition** | `defineApp` + `defineExtension` — the application root | Brand, layers, extensions |
 | **Layers** | Swappable infrastructure behind `getLayer()` | Database, cache, email, storage, auth, logging, errors, jobs |
-| **Hooks** | Cross-tool runtime communication | Actions (request/response), broadcasts (events), filters (pipelines) |
-| **Extensions** | App-level systems tools contribute to | Onboarding, search, dashboard, notifications |
+| **Hooks** | Cross-module runtime communication | Actions (request/response), broadcasts (events), filters (pipelines) |
+| **Extensions** | App-level systems modules contribute to | Onboarding, search, dashboard, notifications |
+
+### Toolkits
+
+Toolkits define module systems on top of the generic framework. `@ydtb/anvil-toolkit` provides the **tool/scope pattern** -- a module system where self-contained business features (tools) are organized into a scope hierarchy:
+
+| Toolkit Primitive | What | Example |
+|---|---|---|
+| **Tools** | `defineTool` + `defineClient` + `defineServer` — business features | Contacts, billing, team -- each a self-contained package |
+| **Scopes** | `scope` — organizational hierarchy and routing | Workspace > Company > Project |
 
 ## Framework Ships Empty
 
@@ -91,11 +100,18 @@ Same pattern for tool surfaces. Extensions augment `ClientContributions` and `Se
 
 | Package | What |
 |---|---|
-| `@ydtb/anvil` | Core types — `defineApp`, `defineTool`, `scope`, `defineClient`, `defineServer`, `defineExtension` |
-| `@ydtb/anvil-server` | Server runtime — `createServer`, `createWorker`, `getLayer`, `getHooks`, request context, health checks, SPA handler |
-| `@ydtb/anvil-hooks` | Hook system — actions, broadcasts, filters, typed wrappers, side-channels |
-| `@ydtb/anvil-build` | Build system — Vite/Rollup virtual module plugin, dev server, Vite config helper |
-| `@ydtb/anvil-client` | Client runtime — route assembly, API clients, `useLayer`, `useScope`, `useAuth`, `createAnvilApp` |
+| `@ydtb/anvil` | Core types -- `defineApp`, `defineExtension`, `LayerMap`, `ClientContributions`, `ServerContributions` |
+| `@ydtb/anvil-server` | Server runtime -- `createServer`, `createWorker`, `getLayer`, `getHooks`, request context, health checks, SPA handler |
+| `@ydtb/anvil-hooks` | Hook system -- actions, broadcasts, filters, typed wrappers, side-channels |
+| `@ydtb/anvil-build` | Build system -- Vite/Rollup plugin, dev server, Vite config helper |
+| `@ydtb/anvil-client` | Client runtime -- `useLayer`, `useScope`, `useAuth`, `LayerProvider`, `AuthProvider` |
+
+### Toolkits
+
+| Package | What |
+|---|---|
+| `@ydtb/anvil-toolkit` | Tool/scope module system -- `defineTool`, `scope`, `defineClient`, `defineServer`, `createToolServer`, `toolEntry`, `assembleRoutes`, `createAnvilApp` |
+| `@ydtb/anvil-toolkit/build` | Build integration -- `toolkitModules` (virtual module generators for tool discovery) |
 
 ### Layer Packages
 
@@ -139,12 +155,33 @@ export function pusher(config: { appId: string }): LayerConfig<'realtime'> {
 
 ## How It Works
 
-### Server
+### Server (framework)
 
 ```ts
 import { createServer } from '@ydtb/anvil-server'
 
 const server = createServer({
+  config: composeConfig,
+  middleware: [
+    { id: 'auth', handler: authMiddleware(), priority: 10 },
+    { id: 'scope', handler: scopeMiddleware(), priority: 20 },
+  ],
+  routes: { auth: authApp },
+})
+
+await server.start()
+```
+
+`createServer` boots layers via Effect (dependency graph resolved automatically), creates a Hono app, mounts routes, and installs health checks at `/healthz` and `/readyz`.
+
+### Server (with toolkit)
+
+When using `@ydtb/anvil-toolkit`, `createToolServer` extends `createServer` with tool surface processing:
+
+```ts
+import { createToolServer, toolEntry } from '@ydtb/anvil-toolkit'
+
+const server = createToolServer({
   config: composeConfig,
   tools: [toolEntry('contacts', contactsServer)],
   middleware: [
@@ -157,12 +194,10 @@ const server = createServer({
 await server.start()
 ```
 
-`createServer` boots layers via Effect (dependency graph resolved automatically), creates a Hono app, processes tool surfaces (hooks, routers, extension contributions), mounts routes, and installs health checks at `/healthz` and `/readyz`.
-
-### Client
+### Client (with toolkit)
 
 ```tsx
-import { createAnvilApp } from '@ydtb/anvil-client'
+import { createAnvilApp } from '@ydtb/anvil-toolkit'
 
 const { App } = createAnvilApp({
   scopeTree,
@@ -179,14 +214,16 @@ createRoot(document.getElementById('app')!).render(<App />)
 ```ts
 // vite.config.ts
 import { createViteConfig } from '@ydtb/anvil-build/vite'
+import { toolkitModules } from '@ydtb/anvil-toolkit/build'
 
 export default createViteConfig({
   appConfig: config,
   serverPort: 3001,
+  virtualModules: toolkitModules(config),
 })
 ```
 
-The virtual module plugin auto-discovers tools from your scope tree and generates `virtual:anvil/server-tools`, `virtual:anvil/schema`, `virtual:anvil/scope-tree`, and more.
+The toolkit build integration auto-discovers tools from your scope tree and generates `virtual:anvil/server-tools`, `virtual:anvil/schema`, `virtual:anvil/scope-tree`, and more.
 
 ### Dev Server
 
