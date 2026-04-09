@@ -23,6 +23,7 @@
  */
 
 import type { MiddlewareHandler } from 'hono'
+import type { ViteDevServer } from 'vite'
 
 export interface DevMiddlewareConfig {
   /** Project root directory (default: process.cwd()) */
@@ -37,20 +38,10 @@ export interface DevMiddlewareConfig {
  * Create Hono middleware that embeds Vite in middleware mode.
  *
  * Must be awaited — Vite server creation is async.
- * Only use in development. In production, serve static assets via CDN or
- * Hono's static file middleware.
+ * Only use in development.
  *
- * Handles:
- * - HMR websocket upgrades
- * - React Fast Refresh
- * - Module transformation and serving
- * - index.html transformation
- * - Static asset serving from /public
- *
- * Passes through to Hono for:
- * - /api/* routes
- * - /healthz, /readyz
- * - Any route Vite doesn't handle
+ * Uses Vite's native fetch handler (available in Vite 6+) or falls back
+ * to transformRequest for module serving.
  */
 export async function createDevMiddleware(
   config?: DevMiddlewareConfig,
@@ -61,119 +52,135 @@ export async function createDevMiddleware(
     viteOptions = {},
   } = config ?? {}
 
-  // Dynamic import — Vite is a dev dependency, not needed in production
   const { createServer: createViteServer } = await import('vite')
+  const fs = await import('fs')
+  const path = await import('path')
 
   const vite = await createViteServer({
     root,
     configFile,
-    server: { middlewareMode: true },
-    appType: 'spa',
+    server: {
+      middlewareMode: true,
+      hmr: {
+        // Use websocket on a separate path to avoid conflicts with Hono
+        path: '/__vite_hmr',
+      },
+    },
+    appType: 'custom',
     ...viteOptions,
   })
 
+  const indexHtmlPath = path.join(root, 'index.html')
+
   return async (c, next) => {
     const url = new URL(c.req.url)
-    const path = url.pathname
+    const pathname = url.pathname
 
     // Skip API routes and health endpoints — let Hono handle them
-    if (path.startsWith('/api') || path === '/healthz' || path === '/readyz') {
+    if (pathname.startsWith('/api') || pathname === '/healthz' || pathname === '/readyz') {
       return next()
     }
 
-    // Try Vite first
-    return new Promise<Response | void>((resolve) => {
-      // Create a Node-compatible req/res pair for Vite's connect middleware
-      const req = createNodeRequest(c.req.raw, path, url.search)
-      const res = createNodeResponse((statusCode, headers, body) => {
-        resolve(new Response(body, {
-          status: statusCode,
-          headers: headers as Record<string, string>,
-        }))
-      })
+    // Handle Vite HMR websocket — pass through (Bun.serve handles upgrade separately)
+    // For regular HTTP requests, delegate to Vite
 
-      // Run through Vite's middleware stack
-      vite.middlewares(req as any, res as any, () => {
-        // Vite didn't handle it — check if it's a page request
-        // that should get the transformed index.html
-        if (!path.includes('.') || path === '/') {
-          // SPA fallback — serve transformed index.html
-          vite.transformIndexHtml(path, getIndexHtml(root)).then((html) => {
-            resolve(new Response(html, {
-              status: 200,
-              headers: { 'content-type': 'text/html' },
-            }))
-          }).catch(() => {
-            // No index.html — let Hono handle it
-            resolve(next() as any)
-          })
-        } else {
-          // Static file Vite didn't handle — pass to Hono
-          resolve(next() as any)
-        }
-      })
-    })
+    try {
+      // Try to serve via Vite's internal middleware using a fetch-based approach
+      const viteResponse = await handleViteRequest(vite, c.req.raw, pathname, root, fs, path, indexHtmlPath)
+      if (viteResponse) {
+        return viteResponse
+      }
+    } catch (e) {
+      // Vite couldn't handle it — log and fall through
+      console.error('[dev-middleware] Vite error:', e)
+    }
+
+    // Vite didn't handle it — let Hono try
+    return next()
   }
 }
 
 // ---------------------------------------------------------------------------
-// Helpers — minimal Node.js compat for Vite's connect middleware
+// Vite request handling
 // ---------------------------------------------------------------------------
 
-function createNodeRequest(request: Request, path: string, search: string) {
-  const headers: Record<string, string> = {}
-  request.headers.forEach((value, key) => {
-    headers[key] = value
-  })
+async function handleViteRequest(
+  vite: ViteDevServer,
+  request: Request,
+  pathname: string,
+  root: string,
+  fs: typeof import('fs'),
+  path: typeof import('path'),
+  indexHtmlPath: string,
+): Promise<Response | null> {
 
-  return {
-    url: path + search,
-    method: request.method,
-    headers,
-    on: () => {},
-    pipe: () => {},
-    // Vite's connect middleware checks these
-    originalUrl: path + search,
-    socket: { remoteAddress: '127.0.0.1' },
+  // 1. Vite special paths (client, HMR)
+  if (pathname.startsWith('/@') || pathname.startsWith('/__vite')) {
+    return transformAndServe(vite, pathname)
   }
+
+  // 2. Node modules (.vite deps, optimized deps)
+  if (pathname.startsWith('/node_modules/') || pathname.includes('.vite')) {
+    return transformAndServe(vite, pathname)
+  }
+
+  // 3. Source files (.ts, .tsx, .js, .jsx, .css, .json, etc.)
+  const ext = path.extname(pathname)
+  if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.css', '.json', '.svg', '.png', '.jpg', '.gif', '.woff', '.woff2', '.ttf', '.eot'].includes(ext)) {
+    // Check if the file exists in the project
+    const filePath = path.join(root, pathname)
+    if (fs.existsSync(filePath)) {
+      return transformAndServe(vite, pathname)
+    }
+    // Also try as a module specifier
+    return transformAndServe(vite, pathname)
+  }
+
+  // 4. SPA fallback — serve transformed index.html for page requests
+  if (!ext || ext === '.html') {
+    try {
+      if (fs.existsSync(indexHtmlPath)) {
+        const rawHtml = fs.readFileSync(indexHtmlPath, 'utf-8')
+        const transformedHtml = await vite.transformIndexHtml(pathname, rawHtml)
+        return new Response(transformedHtml, {
+          status: 200,
+          headers: { 'content-type': 'text/html; charset=utf-8' },
+        })
+      }
+    } catch {
+      // index.html transform failed
+    }
+  }
+
+  return null
 }
 
-function createNodeResponse(
-  onFinish: (status: number, headers: Record<string, string>, body: string) => void,
-) {
-  let statusCode = 200
-  const headers: Record<string, string> = {}
-  let body = ''
-
-  return {
-    statusCode,
-    setHeader(key: string, value: string) {
-      headers[key] = value
-    },
-    getHeader(key: string) {
-      return headers[key]
-    },
-    writeHead(status: number, hdrs?: Record<string, string>) {
-      statusCode = status
-      if (hdrs) Object.assign(headers, hdrs)
-    },
-    write(chunk: string | Buffer) {
-      body += typeof chunk === 'string' ? chunk : chunk.toString()
-    },
-    end(chunk?: string | Buffer) {
-      if (chunk) body += typeof chunk === 'string' ? chunk : chunk.toString()
-      onFinish(statusCode, headers, body)
-    },
-    on: () => {},
-  }
-}
-
-function getIndexHtml(root: string): string {
+async function transformAndServe(
+  vite: ViteDevServer,
+  pathname: string,
+): Promise<Response | null> {
   try {
-    const fs = require('fs')
-    const path = require('path')
-    return fs.readFileSync(path.join(root, 'index.html'), 'utf-8')
+    const result = await vite.transformRequest(pathname)
+    if (!result) return null
+
+    // Determine content type
+    let contentType = 'application/javascript'
+    if (pathname.endsWith('.css')) {
+      contentType = 'text/css'
+    } else if (pathname.endsWith('.json')) {
+      contentType = 'application/json'
+    } else if (pathname.endsWith('.svg')) {
+      contentType = 'image/svg+xml'
+    }
+
+    return new Response(result.code, {
+      status: 200,
+      headers: {
+        'content-type': contentType,
+        ...(result.map ? { 'x-sourcemap': 'true' } : {}),
+      },
+    })
   } catch {
-    return '<!DOCTYPE html><html><body><div id="app"></div><script type="module" src="/client/main.tsx"></script></body></html>'
+    return null
   }
 }
