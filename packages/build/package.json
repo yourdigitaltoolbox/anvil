@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./plugin": "./src/plugin.ts"
+    "./plugin": "./src/plugin.ts",
+    "./vite": "./src/vite-config.ts",
+    "./dev": "./src/dev-server.ts"
   },
   "scripts": {
     "test": "vitest run",
