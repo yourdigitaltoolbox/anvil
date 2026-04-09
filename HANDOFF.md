@@ -25,7 +25,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ## Current State
 
-**Core framework complete. Server v0.2 done.** Ten packages built. 98 tests passing. Example app running end-to-end.
+**Core framework complete. All layer packages done.** Twelve packages built. 129 tests passing. Example app running end-to-end.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
 - Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
@@ -94,6 +94,22 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - TTL support on set, periodic cleanup in memory variant
 - Both variants implement identical contract — swap one line in compose.config
 
+### `@ydtb/anvil-layer-bullmq` — ✅ DONE (10 tests)
+- `bullmq()` factory — Queue + Worker lifecycle via Effect acquireRelease
+- `memoryJobs()` — in-memory queue for dev/test, sync handler dispatch
+- `JobLayer` contract: `enqueue`, `registerHandler`, `getJob`
+- Job status tracking (waiting, completed, failed)
+
+### `@ydtb/anvil-layer-resend` — ✅ DONE (8 tests)
+- `resend()` factory — Resend SDK, stateless HTTP
+- `consoleEmail()` — logs to console, silent mode for tests
+- `EmailLayer` contract: `send` → `{ id }`
+
+### `@ydtb/anvil-layer-s3` — ✅ DONE (13 tests)
+- `s3()` factory — S3Client lifecycle, supports MinIO/R2 endpoints
+- `memoryStorage()` — Map<string, Buffer>, seed data support
+- `StorageLayer` contract: `put`, `get`, `del`, `exists`, `getUrl`
+
 ### `@ydtb/anvil-client` — ✅ DONE (15 tests)
 - `assembleRoutes(scopeTree, tools)` — pure function: scope tree + tool surfaces → scope-grouped route structure
 - `createApiClient(toolId)` — URL + headers builder with automatic scope injection
@@ -124,24 +140,28 @@ Surfaces handle **structural** communication (what a tool IS). Hooks handle **ru
 
 ## What's Next
 
-**Core framework and server v0.2 complete.** All five core packages + four layer packages built, tested, and pushed.
+**Core framework, server v0.2, and all seven layer packages complete.** 12 packages, 129 tests, all pushed.
 
-### Priority 1: Remaining layer packages
-Pattern is proven. Build as needed:
-- `@ydtb/anvil-layer-bullmq` — JobLayer (cron scheduling, trigger-based execution)
-- `@ydtb/anvil-layer-resend` — EmailLayer (transactional email)
-- `@ydtb/anvil-layer-s3` — StorageLayer (file/blob storage)
+### Priority 1: Extension packages (YDTB-specific)
+Build during YDTB migration phase. These are app-level systems, not framework packages:
+- `@myapp/ext-onboarding` — setup wizard, step collection from tools
+- `@myapp/ext-search` — global search UI, query aggregation across tools
+- `@myapp/ext-dashboard` — dashboard layout, card collection from tools
+- `@myapp/ext-notifications` — notification panel, delivery engine
+- `@myapp/ext-credentials` — OAuth UI, credential vault
+- `@myapp/ext-activity` — activity feed, audit logging
 
-### Priority 2: Extension packages (YDTB-specific)
-Build during YDTB migration phase:
-- `@myapp/ext-onboarding`, `@myapp/ext-search`, `@myapp/ext-dashboard`
-- `@myapp/ext-notifications`, `@myapp/ext-credentials`, `@myapp/ext-activity`
-
-### Priority 3: Dev experience
+### Priority 2: Dev experience
 - Dev server (Vite for client + server process with watch)
 - Workspace alias resolver (kills 158-alias file in YDTB)
 - Getting started guide / documentation
 - `turbo run test` from root wired up
+
+### Priority 3: Polish
+- Example app updated to use all layer packages
+- Cache helpers (SPA shell caching, loader caching middleware)
+- `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback (enables test isolation)
+- API reference documentation
 
 ## Key Design Decisions
 
@@ -581,7 +601,12 @@ Frameworks reviewed during Session 1, ranked by architectural similarity:
 - **Caching architecture** — one CacheLayer, framework provides helpers, app decides policy.
 - **Surfaces vs hooks** — structural (surfaces) vs runtime (hooks) clarified.
 
-**Session 2 totals:** 10 packages, 98 tests, ~8,000+ lines, 14 commits pushed to remote. Core framework + server v0.2 + 4 layer packages complete.
+**Completed all layer packages:**
+- **`@ydtb/anvil-layer-bullmq`** — Queue + Worker lifecycle, memory variant for tests. 10 tests.
+- **`@ydtb/anvil-layer-resend`** — Resend SDK, console variant for tests. 8 tests.
+- **`@ydtb/anvil-layer-s3`** — S3Client lifecycle, memory variant for tests. 13 tests.
+
+**Session 2 totals:** 12 packages, 129 tests, ~10,000+ lines, 16 commits pushed to remote. Core framework + server v0.2 + all 7 layer packages complete.
 
 ### Session 1 (2026-04-08)
 - Reviewed Effect-TS as potential infrastructure layer — decided to use internally in server, not expose to tools
