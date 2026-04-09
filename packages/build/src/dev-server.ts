@@ -17,7 +17,13 @@
  * - Server: Bun subprocess with --watch for auto-restart on file changes
  */
 
-import { spawn, type Subprocess } from 'bun'
+// Dynamic import to avoid breaking Node.js/Vite environments
+// that load this module's barrel export
+type Subprocess = { kill: () => void }
+async function bunSpawn(opts: { cmd: string[]; env: Record<string, string | undefined>; stdout: 'inherit'; stderr: 'inherit' }): Promise<Subprocess> {
+  const { spawn } = await import('bun')
+  return spawn(opts)
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,10 +70,10 @@ export async function createDevServer(config: DevServerConfig): Promise<void> {
   // Server process (Bun --watch)
   // -----------------------------------------------------------------------
 
-  function startServer(): Subprocess {
+  async function startServer(): Promise<Subprocess> {
     console.log(`\n  [anvil-dev] Starting server: ${serverEntry} (port ${serverPort})`)
 
-    const proc = spawn({
+    return bunSpawn({
       cmd: ['bun', '--watch', serverEntry],
       env: {
         ...process.env,
@@ -77,18 +83,16 @@ export async function createDevServer(config: DevServerConfig): Promise<void> {
       stdout: 'inherit',
       stderr: 'inherit',
     })
-
-    return proc
   }
 
   // -----------------------------------------------------------------------
   // Vite client dev server
   // -----------------------------------------------------------------------
 
-  function startVite(): Subprocess {
+  async function startVite(): Promise<Subprocess> {
     console.log(`\n  [anvil-dev] Starting Vite client (port ${clientPort}, proxying /api/* → localhost:${serverPort})`)
 
-    const proc = spawn({
+    return bunSpawn({
       cmd: [
         'bunx', 'vite',
         '--port', String(clientPort),
@@ -102,8 +106,6 @@ export async function createDevServer(config: DevServerConfig): Promise<void> {
       stdout: 'inherit',
       stderr: 'inherit',
     })
-
-    return proc
   }
 
   // -----------------------------------------------------------------------
@@ -125,12 +127,12 @@ export async function createDevServer(config: DevServerConfig): Promise<void> {
   // -----------------------------------------------------------------------
 
   // Start server first (client proxies to it)
-  serverProc = startServer()
+  serverProc = await startServer()
 
   // Give server a moment to boot before starting Vite
   if (clientEntry) {
     await new Promise((r) => setTimeout(r, 1000))
-    viteProc = startVite()
+    viteProc = await startVite()
   }
 
   console.log(`

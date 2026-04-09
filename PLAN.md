@@ -130,14 +130,14 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 - Version management
 - Changesets or similar
 
-### D6: ⬜ Getting started guide
+### D6: ✅ Getting started guide
 - How to create a new Anvil app from scratch
 - compose.config.ts walkthrough
 - Creating a tool
 - Creating a layer
 - Creating an extension
 
-### D7: ⬜ API reference documentation
+### D7: ✅ API reference documentation
 - Auto-generated from JSDoc/TSDoc
 - Published alongside getting started guide
 
