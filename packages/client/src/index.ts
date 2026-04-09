@@ -35,3 +35,11 @@ export type { ClientLayerMap, LayerProviderProps } from './layers.tsx'
 // Scope context (React)
 export { useScope, ScopeProvider, getCurrentScope } from './scope.tsx'
 export type { ScopeContextValue, ScopeProviderProps } from './scope.tsx'
+
+// App helper
+export { createAnvilApp } from './create-app.tsx'
+export type { AnvilAppConfig, AnvilApp } from './create-app.tsx'
+
+// Auth (React)
+export { AuthProvider, useAuth, AuthGate } from './auth.tsx'
+export type { AuthUser, AuthContextValue, AuthProviderProps, AuthGateProps } from './auth.tsx'

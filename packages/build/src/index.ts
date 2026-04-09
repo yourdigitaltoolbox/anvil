@@ -29,6 +29,12 @@
 export { anvilPlugin } from './plugin.ts'
 export type { AnvilPluginOptions } from './plugin.ts'
 
+export { createDevServer } from './dev-server.ts'
+export type { DevServerConfig } from './dev-server.ts'
+
+export { createViteConfig } from './vite-config.ts'
+export type { ViteConfigOptions } from './vite-config.ts'
+
 export { collectTools, collectToolsWithScopes } from './collect-tools.ts'
 
 export {

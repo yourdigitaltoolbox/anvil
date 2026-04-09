@@ -42,26 +42,26 @@ The `betterAuth()` factory has only been tested with `mockAuth()`. Before ydtb-a
 
 Without a dev server, every change in ydtb-anvil requires manually restarting the server. This slows development significantly during migration.
 
-### B1: ⬜ Design dev server architecture
+### B1: ✅ Design dev server architecture
 - Vite dev server for the client (HMR, React Fast Refresh)
 - Server process with file watching (restart on change)
 - Proxy from Vite to the server for `/api/*` routes
 - Single `bun run dev` command starts both
 - **File:** `packages/build/src/dev-server.ts`
 
-### B2: ⬜ Implement server file watcher
+### B2: ✅ Implement server file watcher
 - Watch `server/`, `extensions/`, `tools/*/src/server.ts` for changes
 - Restart the server process on change
 - Preserve the Hono app port between restarts
 - **Depends on:** B1 design
 
-### B3: ⬜ Implement Vite client dev server
+### B3: ✅ Implement Vite client dev server
 - Vite config with React plugin + Anvil virtual module plugin
 - Proxy `/api/*` and `/healthz` and `/readyz` to the server process
 - HMR for client code
 - **Depends on:** B1 design
 
-### B4: ⬜ `createDevServer()` API
+### B4: ✅ `createDevServer()` API
 - Single function that takes config and starts both processes
 - Export from `@ydtb/anvil-build`
 - Used by consuming apps: `bun run dev.ts` calls `createDevServer({ ... })`
@@ -73,7 +73,7 @@ Without a dev server, every change in ydtb-anvil requires manually restarting th
 
 Setting up TanStack Router with scope-aware routing, auth gate, and provider hierarchy from scratch is significant boilerplate. A helper that handles the 80% case saves time.
 
-### C1: ⬜ Design `createAnvilApp()` API
+### C1: ✅ Design `createAnvilApp()` API
 - Takes: compose config, tool client surfaces, options (auth, providers)
 - Returns: mountable React app with TanStack Router wired up
 - Scope-aware route assembly is automatic
@@ -81,7 +81,7 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 - Provider hierarchy: QueryClient, LayerProvider, ScopeProvider, app-specific providers
 - Customizable: app can add providers, override layout, add non-tool routes
 
-### C2: ⬜ Implement `createAnvilApp()`
+### C2: ✅ Implement `createAnvilApp()`
 - Assembles routes from scope tree + tool surfaces
 - Creates TanStack Router with scope route layouts
 - Wraps in provider hierarchy
@@ -90,7 +90,7 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 - **Depends on:** C1 design
 - **Peer deps:** `@tanstack/react-router`, `@tanstack/react-query`
 
-### C3: ⬜ Auth client helpers
+### C3: ✅ Auth client helpers
 - `useAuth()` hook — current user, session, sign-out
 - `AuthGate` component — renders children only if authenticated
 - `LoginPage` component — basic login form (customizable)
