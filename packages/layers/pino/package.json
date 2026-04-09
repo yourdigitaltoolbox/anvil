@@ -1,0 +1,26 @@
+{
+  "name": "@ydtb/anvil-layer-pino",
+  "version": "0.0.1",
+  "description": "Pino logging layer for Anvil — structured logging with JSON/pretty output",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./silent": "./src/silent.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ydtb/anvil": "workspace:*",
+    "@ydtb/anvil-server": "workspace:*",
+    "effect": "^3.14.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.2",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  }
+}

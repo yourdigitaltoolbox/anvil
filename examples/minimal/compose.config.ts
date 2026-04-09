@@ -6,6 +6,7 @@
  */
 
 import { defineApp, scope } from '../../packages/anvil/src/index.ts'
+import { pino } from '../../packages/layers/pino/src/index.ts'
 import { memoryStore } from './layer-store.ts'
 import { widgets } from './ext-widgets.ts'
 import { greeter } from './tool-greeter.ts'
@@ -17,6 +18,7 @@ export default defineApp({
 
   layers: {
     store: memoryStore(),
+    logging: pino({ level: 'info' }),
   },
 
   extensions: [widgets],

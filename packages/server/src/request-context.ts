@@ -18,7 +18,7 @@
  */
 
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { Logger } from '@ydtb/anvil'
+import type { Logger, LayerMap } from '@ydtb/anvil'
 
 // ---------------------------------------------------------------------------
 // Request Context Type
@@ -93,6 +93,25 @@ export function getRequestContext(): RequestContext | undefined {
 }
 
 /**
+ * Layer resolver reference — set lazily to avoid circular imports.
+ * getLogger() uses this to check for a logging layer without importing
+ * from accessors.ts directly at module load time.
+ */
+let _tryGetLoggingLayer: (() => { logger: Logger } | null) | null = null
+
+/**
+ * Wire up the logging layer resolver. Called by createServer after
+ * the layer accessor is available.
+ *
+ * @internal
+ */
+export function provideLoggingLayerResolver(
+  resolver: (() => { logger: Logger } | null) | null,
+): void {
+  _tryGetLoggingLayer = resolver
+}
+
+/**
  * Get the current logger.
  *
  * Resolution order:
@@ -104,9 +123,12 @@ export function getLogger(): Logger {
   const ctx = requestContext.getStore()
   if (ctx) return ctx.logger
 
-  // TODO: Check LogLayer once getLayer is implemented
-  // const logLayer = tryGetLayer('logging')
-  // if (logLayer) return logLayer.logger
+  // Check LogLayer — available after layers boot, used for logging
+  // outside request context (jobs, boot sequence after layers are ready)
+  if (_tryGetLoggingLayer) {
+    const loggingLayer = _tryGetLoggingLayer()
+    if (loggingLayer) return loggingLayer.logger
+  }
 
   return consoleLogger
 }

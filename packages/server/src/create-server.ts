@@ -23,8 +23,9 @@ import type { Hono as HonoType } from 'hono'
 import { HookSystem } from '@ydtb/anvil-hooks'
 import type { AppConfig } from '@ydtb/anvil'
 import type { MiddlewareHandler } from 'hono'
-import { requestContext, createConsoleLogger, getLogger } from './request-context.ts'
+import { requestContext, createConsoleLogger, getLogger, provideLoggingLayerResolver } from './request-context.ts'
 import type { RequestContext } from './request-context.ts'
+import { getLayer } from './accessors.ts'
 import { provideHookSystem, provideContributions } from './accessors.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
@@ -131,6 +132,20 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     logger.info({}, 'Starting Anvil server')
     lifecycle = await bootLifecycle(config.layers)
 
+    // 1b. Wire logging layer into getLogger() if available
+    provideLoggingLayerResolver(() => {
+      try {
+        // 'logging' may or may not exist in LayerMap depending on installed packages
+        const layer = (getLayer as (key: string) => unknown)('logging')
+        if (layer && typeof (layer as Record<string, unknown>).logger === 'object') {
+          return layer as { logger: import('@ydtb/anvil').Logger }
+        }
+        return null
+      } catch {
+        return null
+      }
+    })
+
     // 2. Create hook system
     const hooks = new HookSystem()
     provideHookSystem(hooks)
@@ -200,6 +215,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     // Clean up accessors
     provideHookSystem(null)
     provideContributions(null)
+    provideLoggingLayerResolver(null)
 
     // Shut down layers (releases resources in reverse order)
     if (lifecycle) {

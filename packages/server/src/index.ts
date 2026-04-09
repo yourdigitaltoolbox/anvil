@@ -48,3 +48,4 @@ export { createLayerConfig } from './layer-helpers.ts'
 
 // Test helpers
 export { provideLayerResolver, provideHookSystem, provideContributions } from './accessors.ts'
+export { provideLoggingLayerResolver } from './request-context.ts'
