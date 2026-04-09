@@ -1,71 +1,43 @@
 /**
  * @ydtb/anvil-toolkit — YDTB's tool/scope pattern for Anvil.
  *
- * Provides:
- * - `defineTool`, `defineClient`, `defineServer` — tool surface definitions
- * - `scope` — hierarchical scope grouping with tool includes
- * - `createToolServer`, `createToolWorker` — server wrappers with tool processing
- * - `assembleRoutes`, `createAnvilApp` — client-side route assembly and app helper
- * - `toolEntry`, `collectTools` — utilities
- * - `toolkitModules` — virtual module generators for the build plugin
- *
- * This is the YDTB pattern. Other toolkits can define different module
- * systems (CMS content types, admin panels, etc.) on top of Anvil.
+ * Two entry points:
+ * - `@ydtb/anvil-toolkit/core` — universal (no server, no React). Use everywhere.
+ * - `@ydtb/anvil-toolkit` — everything (re-exports core + server wrappers + React helpers)
  *
  * @example
  * ```ts
- * import { defineTool, scope, defineClient, defineServer } from '@ydtb/anvil-toolkit'
+ * // In compose.config.ts, vite.config.ts, client code, server code:
+ * import { defineTool, defineScope, defineClient, defineServer } from '@ydtb/anvil-toolkit/core'
+ *
+ * // In server entry (needs server runtime):
  * import { createToolServer, toolEntry } from '@ydtb/anvil-toolkit'
+ *
+ * // In client entry (needs React):
+ * import { createAnvilApp } from '@ydtb/anvil-toolkit'
  * ```
  */
 
-// Augment AppConfig with scopes field (side-effect import)
-import './augment.ts'
+// Re-export everything from core (universal — no server, no React)
+export * from './core.ts'
 
-// Tool definitions
-export { defineTool } from './define-tool.ts'
-export type { ToolDescriptor } from './define-tool.ts'
-
-// Scope definitions
-export { defineScope, scope } from './scope.ts'
-export type { ScopeDefinition, ScopeTree } from './scope.ts'
-
-// Client surface
-export { defineClient } from './client.ts'
-export type { Client, ClientCore, ClientContributions } from './client.ts'
-export type { RouteEntry, NavigationEntry, PermissionEntry, PermissionGroup } from './client.ts'
-
-// Server surface
-export { defineServer } from './server.ts'
-export type { Server, ServerCore, ServerContributions, ServerHooks } from './server.ts'
-
-// Tool server/worker wrappers
+// Server wrappers (requires @ydtb/anvil-server)
 export { createToolServer } from './create-tool-server.ts'
 export type { ToolServerConfig } from './create-tool-server.ts'
 export { createToolWorker } from './create-tool-worker.ts'
 export type { ToolWorkerConfig } from './create-tool-worker.ts'
 
-// Surface processor
+// Surface processor (requires @ydtb/anvil-server)
 export { processSurfaces, toolEntry } from './surfaces.ts'
 export type { ToolEntry, ProcessedSurfaces } from './surfaces.ts'
 
-// Route assembly (client)
-export { assembleRoutes } from './assemble-routes.ts'
-export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemble-routes.ts'
-
-// App helper (client)
+// Client helpers (requires React)
 export { createAnvilApp } from './create-app.tsx'
 export type { AnvilAppConfig, AnvilApp } from './create-app.tsx'
 
-// Build utilities
-export { collectTools, collectToolsWithScopes } from './collect-tools.ts'
+// Route assembly (requires React types for ComponentType)
+export { assembleRoutes } from './assemble-routes.ts'
+export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemble-routes.ts'
 
-// Generators (for advanced use — normally use toolkitModules from ./build)
-export {
-  generateServerToolsModule,
-  generateClientToolsModule,
-  generateSchemaModule,
-  generateScopeTreeModule,
-  generatePermissionsModule,
-  generateExtensionsModule,
-} from './generators.ts'
+// Build integration re-exported for convenience
+export { collectTools, collectToolsWithScopes } from './collect-tools.ts'
