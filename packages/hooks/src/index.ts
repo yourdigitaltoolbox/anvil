@@ -47,6 +47,8 @@ export type {
   FilterQueryOptions,
   HookAPI,
   HookPriorityValue,
+  SideChannelConfig,
+  SideChannelContext,
 } from './types.ts'
 
 export { HookPriority } from './types.ts'

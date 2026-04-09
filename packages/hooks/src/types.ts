@@ -52,37 +52,60 @@ export type HookPriorityValue = (typeof HookPriority)[keyof typeof HookPriority]
 // ---------------------------------------------------------------------------
 
 /**
- * Structured metadata passed with broadcasts. Platform listeners
- * (activity logging, notifications) inspect these fields to create
- * side effects automatically.
+ * Generic metadata passed with broadcasts. Side-channel handlers
+ * inspect these keys to create cross-cutting side effects (activity
+ * logging, notifications, etc.).
  *
- * This is extensible — consuming apps add their own metadata keys
- * via declaration merging.
+ * Consuming apps define their own option keys and register
+ * corresponding side-channels via `registerSideChannel()`.
+ *
+ * @example
+ * ```ts
+ * // Fire a broadcast with app-specific metadata
+ * hooks.broadcast('contact:created', payload, {
+ *   activity: { entityType: 'contact', entityId: 'ct_1', action: 'created' },
+ * })
+ * ```
  */
-export interface BroadcastOptions {
-  /** Activity logging — if present, an activity log entry is created */
-  activity?: {
-    entityType: string
-    entityId: string
-    action: string
-  }
+export type BroadcastOptions = Record<string, unknown>
 
-  /** Notification — if present, an in-app notification is created */
-  notification?: {
-    recipientId: string
-    title: string
-    body: string
-    href: string
-    scope?: string
-    scopeId?: string
-    toolId?: string
-    type?: string
-    groupKey?: string
-    metadata?: Record<string, unknown>
-  }
+// ---------------------------------------------------------------------------
+// Side Channels
+// ---------------------------------------------------------------------------
 
-  /** Extensible — consuming apps register their own metadata keys */
-  [key: string]: unknown
+/**
+ * Context passed to a side-channel payload builder.
+ */
+export interface SideChannelContext {
+  /** The name of the broadcast that triggered this side-channel. */
+  broadcastName: string
+  /** The payload of the original broadcast. */
+  payload: unknown
+  /** The value of the matching option key from BroadcastOptions. */
+  optionValue: unknown
+}
+
+/**
+ * Configuration for a side-channel — a cross-cutting broadcast that fires
+ * automatically when a specific key is present in BroadcastOptions.
+ *
+ * @example
+ * ```ts
+ * hooks.registerSideChannel('activity', {
+ *   broadcastName: 'activity',
+ *   buildPayload: ({ broadcastName, payload, optionValue }) => ({
+ *     broadcastName,
+ *     activity: optionValue,
+ *     metadata: payload,
+ *   }),
+ * })
+ * ```
+ */
+export interface SideChannelConfig {
+  /** The broadcast name to fire when this side-channel is triggered. */
+  broadcastName: string
+  /** Build the payload for the side-channel broadcast. */
+  buildPayload: (context: SideChannelContext) => unknown
 }
 
 // ---------------------------------------------------------------------------
@@ -166,6 +189,17 @@ export interface HookAPI {
     initialValue: TValue,
     options?: FilterQueryOptions
   ): TValue
+
+  // --- Side Channels ---
+
+  /**
+   * Register a side-channel that fires automatically when a broadcast
+   * is called with a matching key in its options.
+   *
+   * @param optionKey - The key to watch for in BroadcastOptions
+   * @param config - The side-channel configuration (target broadcast name + payload builder)
+   */
+  registerSideChannel(optionKey: string, config: SideChannelConfig): void
 
   // --- Lifecycle ---
 

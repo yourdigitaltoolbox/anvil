@@ -2,12 +2,13 @@
  * Composition root — the single source of truth for an Anvil application.
  *
  * `defineApp` declares everything: brand identity, infrastructure layers,
- * and the scope tree with tool includes. This is the one file that tells
- * you what the entire application is made of.
+ * the scope tree with tool includes, and extensions. This is the one file
+ * that tells you what the entire application is made of.
  */
 
 import type { ScopeTree } from './scope.ts'
 import type { RequiredLayers } from './layers.ts'
+import type { Extension } from './extension.ts'
 
 // ---------------------------------------------------------------------------
 // Brand Config
@@ -29,34 +30,43 @@ export interface BrandConfig {
 export interface AppConfig {
   /** Brand identity */
   brand: BrandConfig
-  /** Infrastructure layers — all required, compile-time verified */
+  /** Infrastructure layers — requires all keys declared by installed layer packages */
   layers: RequiredLayers
   /** Scope hierarchy — nested tree with per-level tool includes */
   scopes: ScopeTree
+  /** Extensions — app-level systems that define contracts for tools to contribute to */
+  extensions?: Extension[]
 }
 
 /**
  * Define an Anvil application.
  *
  * The composition root is the single source of truth. It declares the brand,
- * wires infrastructure layers, and defines the scope hierarchy with tool includes.
+ * wires infrastructure layers, defines the scope hierarchy with tool includes,
+ * and registers extensions.
  *
- * All layer keys are required — omit one and TypeScript errors at compile time.
+ * All layer keys declared by installed layer packages are required — omit one
+ * and TypeScript errors at compile time.
  *
  * @example
  * ```ts
  * import { defineApp, scope } from '@ydtb/anvil'
  * import { postgres } from '@ydtb/anvil-layer-postgres'
  * import { redis } from '@ydtb/anvil-layer-redis'
+ * import { onboarding } from '@ydtb/ext-onboarding'
+ * import { search } from '@ydtb/ext-search'
  *
  * export default defineApp({
  *   brand: { name: 'My App' },
  *   layers: {
  *     database: postgres({ url: env.DATABASE_URL }),
  *     cache: redis({ url: env.REDIS_URL }),
- *     // ... all layers required
  *   },
- *   scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+ *   scopes: scope({
+ *     type: 'system', label: 'System', urlPrefix: '/s',
+ *     includes: [contacts, billing],
+ *   }),
+ *   extensions: [onboarding, search],
  * })
  * ```
  */

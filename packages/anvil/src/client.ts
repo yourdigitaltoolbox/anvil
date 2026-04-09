@@ -1,22 +1,42 @@
 /**
- * Client definition — what a tool contributes to the browser runtime.
+ * Client surface — what a tool contributes to the browser runtime.
  *
- * Each tool exports a `Client` (or a function returning one) from its
- * `./client` subpath. Anvil reads these definitions and registers
- * routes, navigation, permissions, dashboard cards, settings, etc.
+ * The client surface has two parts:
  *
- * ## Scoped features
- * Auto-wired per scope that includes the tool:
- * `routes`, `navigation`, `dashboardCards`, `permissions`, `settings`,
- * `credentials`, `searchProvider`, `tokenProvider`
+ * 1. **Core fields** — routes, navigation, permissions. The framework knows
+ *    how to process these (routing, nav shell, permission registry).
  *
- * ## Non-scoped features
- * Registered globally:
- * `publicRoutes`, `fullscreenRoutes`, `authenticatedRoutes`, `routeShells`,
- * `notificationProviders`, `metrics`, `onboarding`
+ * 2. **Contributions** — extensible fields defined by Extension packages.
+ *    The framework collects them and delivers them to the extension that
+ *    owns them. Installing an extension package augments `ClientContributions`
+ *    via declaration merging, making new fields available on `defineClient`.
+ *
+ * @example
+ * ```ts
+ * import { defineClient } from '@ydtb/anvil'
+ *
+ * export default defineClient({
+ *   // Core — framework processes these
+ *   routes: [
+ *     { path: 'contacts', component: () => import('./routes/contacts-page') },
+ *   ],
+ *   navigation: [
+ *     { label: 'Contacts', path: 'contacts', icon: 'Users' },
+ *   ],
+ *   permissions: [
+ *     { feature: 'contacts', label: 'Contacts', actions: [
+ *       { key: 'contacts.view', label: 'View contacts', category: 'read' },
+ *     ]},
+ *   ],
+ *
+ *   // Contributions — defined by installed extension packages
+ *   // search: { provider: contactSearch },
+ *   // onboarding: { steps: [...] },
+ * })
+ * ```
  */
 
-import type { ComponentType, ReactNode } from 'react'
+import type { ComponentType } from 'react'
 
 // ---------------------------------------------------------------------------
 // Route Types
@@ -67,35 +87,55 @@ export interface PermissionGroup {
 }
 
 // ---------------------------------------------------------------------------
-// Client Definition
+// Extension Contributions — augmented by Extension packages
 // ---------------------------------------------------------------------------
 
-export interface Client {
+/**
+ * Client-side contributions that tools can make to installed extensions.
+ * Empty by default — augmented via declaration merging by extension packages.
+ *
+ * @example
+ * ```ts
+ * // In @ydtb/ext-search
+ * declare module '@ydtb/anvil' {
+ *   interface ClientContributions {
+ *     search?: { provider: SearchProvider }
+ *   }
+ * }
+ * ```
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface ClientContributions {}
+
+// ---------------------------------------------------------------------------
+// Client Core — fields the framework knows how to process
+// ---------------------------------------------------------------------------
+
+export interface ClientCore {
   // --- Scoped features (auto-wired per including scope) ---
+
+  /** Routes rendered inside the scope layout */
   routes?: RouteEntry[]
+  /** Navigation entries for the scope sidebar */
   navigation?: NavigationEntry[]
-  dashboardCards?: unknown[] // CardEntry — defined by consuming app's UI library
+  /** Permission declarations registered in the permission system */
   permissions?: PermissionGroup[]
-  settings?: unknown[]
-  credentials?: unknown[]
-  searchProvider?: unknown
-  tokenProvider?: unknown
 
   // --- Non-scoped features (registered globally) ---
+
+  /** Routes rendered without auth (login, signup, public marketing pages) */
   publicRoutes?: RouteEntry[]
+  /** Routes rendered fullscreen (no scope chrome) */
   fullscreenRoutes?: RouteEntry[]
+  /** Routes rendered with auth but outside any scope (/profile, /settings) */
   authenticatedRoutes?: RouteEntry[]
-  routeShells?: unknown[]
-  notificationProviders?: unknown
-  metrics?: unknown[]
-  onboarding?: unknown[]
-  contextProviders?: Array<{
-    id: string
-    component: ComponentType<{ children: ReactNode }>
-    priority?: number
-  }>
 
   // --- Escape hatch ---
+
+  /**
+   * Imperative setup for edge cases that can't be expressed declaratively.
+   * Called once during client boot after all surfaces are collected.
+   */
   setup?: (ctx: {
     registeredTools: string[]
     hooks: {
@@ -106,27 +146,18 @@ export interface Client {
   }) => void
 }
 
+// ---------------------------------------------------------------------------
+// Client — the full type (core + contributions)
+// ---------------------------------------------------------------------------
+
+/** Full client surface type — core fields plus extension contributions. */
+export type Client = ClientCore & ClientContributions
+
 /**
  * Define a tool's client contribution.
  *
- * @example
- * ```ts
- * import { defineClient } from '@ydtb/anvil'
- *
- * export default defineClient({
- *   routes: [
- *     { path: 'contacts', component: () => import('./routes/contacts-page') },
- *   ],
- *   navigation: [
- *     { label: 'Contacts', path: 'contacts', icon: 'Users' },
- *   ],
- *   permissions: [
- *     { feature: 'contacts', label: 'Contacts', actions: [
- *       { key: 'contacts.view', label: 'View contacts', category: 'read' },
- *     ]},
- *   ],
- * })
- * ```
+ * Core fields (routes, navigation, permissions) are processed by the framework.
+ * Extension contribution fields are collected and delivered to their owning extension.
  */
 export function defineClient(definition: Client): Client {
   return definition

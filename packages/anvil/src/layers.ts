@@ -1,83 +1,48 @@
 /**
  * Layer system — swappable infrastructure with compile-time verification.
  *
- * Each layer is a contract (TypeScript interface) with pluggable implementations.
- * The composition root declares which implementation to use for each layer.
- * Effect manages lifecycle internally (acquire/release, health checks, shutdown).
+ * The framework ships with NO hardcoded layer contracts. `LayerMap` is an
+ * empty interface that layer packages augment via declaration merging:
  *
- * Layers are the "materials" that tools are built with. Swap one line in
- * compose.config.ts to change the database, email provider, job queue, etc.
+ * ```ts
+ * // @ydtb/anvil-layer-postgres
+ * declare module '@ydtb/anvil' {
+ *   interface LayerMap {
+ *     database: DatabaseLayer
+ *   }
+ * }
+ * ```
+ *
+ * Installing a layer package adds its contract to `LayerMap`. `RequiredLayers`
+ * derives from `LayerMap`, so `defineApp` requires exactly the layers declared
+ * by installed packages. No more, no less.
+ *
+ * This means:
+ * - Adding a new layer contract doesn't touch the framework
+ * - Different Anvil apps can have completely different layer sets
+ * - The framework is truly generic — it provides the mechanism, never the policy
  */
 
-import type { Layer } from 'effect'
-
 // ---------------------------------------------------------------------------
-// Layer Contracts
+// Layer Map — augmented by layer packages
 // ---------------------------------------------------------------------------
-
-/** Database layer — query and transaction access. */
-export interface DatabaseLayer {
-  readonly db: unknown // Typed per implementation (DrizzleClient, PrismaClient, etc.)
-}
-
-/** Cache layer — key-value store with optional TTL. */
-export interface CacheLayer {
-  readonly get: (key: string) => Promise<string | null>
-  readonly set: (key: string, value: string, ttlSeconds?: number) => Promise<void>
-  readonly del: (key: string) => Promise<void>
-}
-
-/** Job layer — cron scheduling and trigger-based execution. */
-export interface JobLayer {
-  readonly registerCron: (job: JobDefinition) => void
-  readonly executeJob: (job: JobDefinition) => Promise<void>
-}
-
-/** Log layer — structured logging. */
-export interface LogLayer {
-  readonly logger: Logger
-}
-
-/** Error reporting layer — capture exceptions with context. */
-export interface ErrorLayer {
-  readonly capture: (err: Error, context?: Record<string, unknown>) => void
-}
-
-/** Email layer — send transactional email. */
-export interface EmailLayer {
-  readonly send: (msg: EmailMessage) => Promise<void>
-}
-
-/** Storage layer — file/blob storage. */
-export interface StorageLayer {
-  readonly put: (key: string, data: Buffer | ReadableStream) => Promise<string>
-  readonly get: (key: string) => Promise<Buffer | null>
-  readonly delete: (key: string) => Promise<void>
-  readonly getUrl: (key: string) => string
-}
-
-// ---------------------------------------------------------------------------
-// Layer Map — all required layers
-// ---------------------------------------------------------------------------
-
-/** Map of all layer contracts. Used for compile-time verification. */
-export interface LayerMap {
-  database: DatabaseLayer
-  cache: CacheLayer
-  jobs: JobLayer
-  logging: LogLayer
-  errors: ErrorLayer
-  email: EmailLayer
-  storage: StorageLayer
-}
 
 /**
- * Required layers for `defineApp`.
- * Every key must be provided — omit one and TypeScript errors.
+ * Map of all layer contracts. Empty by default — augmented via declaration
+ * merging by layer packages.
+ *
+ * @example
+ * ```ts
+ * // In @ydtb/anvil-layer-postgres
+ * declare module '@ydtb/anvil' {
+ *   interface LayerMap {
+ *     database: { readonly db: DrizzleClient }
+ *   }
+ * }
+ * ```
  */
-export type RequiredLayers = {
-  [K in keyof LayerMap]: LayerConfig<K>
-}
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface LayerMap {}
 
 // ---------------------------------------------------------------------------
 // Layer Config — what factory functions return
@@ -93,20 +58,34 @@ export interface HealthStatus {
 /**
  * Configuration object returned by layer factory functions.
  * Contains the Effect Layer internally — consumers never see Effect.
+ *
+ * The `_effectLayer` and `_healthCheck` fields are typed as `unknown` in the
+ * core package to avoid an Effect dependency. The server package (`@ydtb/anvil-server`)
+ * casts them to the correct Effect types when processing layers.
  */
 export interface LayerConfig<K extends keyof LayerMap = keyof LayerMap> {
-  /** Layer identifier (matches the key in RequiredLayers) */
+  /** Layer identifier (matches the key in LayerMap) */
   readonly id: K
   /** @internal Effect Layer — used by @ydtb/anvil-server to compose the runtime */
-  readonly _effectLayer: Layer.Layer<LayerMap[K], never, never>
-  /** @internal Health check Effect — used by @ydtb/anvil-server for /readyz */
-  readonly _healthCheck?: unknown // Effect.Effect<HealthStatus>
+  readonly _effectLayer: unknown
+  /** @internal Health check — used by @ydtb/anvil-server for /readyz */
+  readonly _healthCheck?: unknown
+}
+
+/**
+ * Required layers for `defineApp`.
+ * Every key in `LayerMap` must be provided — omit one and TypeScript errors.
+ * When no layer packages are installed, this is an empty object.
+ */
+export type RequiredLayers = {
+  [K in keyof LayerMap]: LayerConfig<K>
 }
 
 // ---------------------------------------------------------------------------
-// Supporting types
+// Supporting types (framework-level, used by multiple packages)
 // ---------------------------------------------------------------------------
 
+/** Background job definition — registered by tools via server surfaces. */
 export interface JobDefinition {
   id: string
   label: string
@@ -115,19 +94,15 @@ export interface JobDefinition {
   handler: () => Promise<void>
 }
 
+/**
+ * Logger interface — the contract for structured logging.
+ * Used by RequestContext and getLogger(). Intentionally minimal —
+ * any structured logger (pino, winston, console wrapper) can satisfy this.
+ */
 export interface Logger {
   debug: (obj: unknown, msg?: string) => void
   info: (obj: unknown, msg?: string) => void
   warn: (obj: unknown, msg?: string) => void
   error: (obj: unknown, msg?: string) => void
   child: (bindings: Record<string, unknown>) => Logger
-}
-
-export interface EmailMessage {
-  to: string | string[]
-  subject: string
-  body: string
-  html?: string
-  from?: string
-  replyTo?: string
 }

@@ -1,11 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { HookSystem, setHookErrorHandler } from '../hook-system.ts'
+
+// Store the default handler so we can restore it
+const defaultErrorHandler = vi.fn()
 
 describe('HookSystem', () => {
   let hooks: HookSystem
 
   beforeEach(() => {
     hooks = new HookSystem()
+    setHookErrorHandler(defaultErrorHandler)
+  })
+
+  afterEach(() => {
+    defaultErrorHandler.mockReset()
   })
 
   // -----------------------------------------------------------------------
@@ -80,18 +88,13 @@ describe('HookSystem', () => {
 
     it('catches listener errors and continues', async () => {
       const calls: string[] = []
-      const errorHandler = vi.fn()
-      setHookErrorHandler(errorHandler)
 
       hooks.onBroadcast('test:event', () => { throw new Error('boom') })
       hooks.onBroadcast('test:event', () => { calls.push('survived') })
 
       await hooks.broadcast('test:event', {})
       expect(calls).toEqual(['survived'])
-      expect(errorHandler).toHaveBeenCalledOnce()
-
-      // Reset error handler
-      setHookErrorHandler(() => {})
+      expect(defaultErrorHandler).toHaveBeenCalledOnce()
     })
 
     it('broadcastSync fires synchronously', () => {
@@ -102,22 +105,104 @@ describe('HookSystem', () => {
       expect(calls).toEqual(['done'])
     })
 
-    it('fires activity side-channel when options.activity is set', async () => {
-      const activityPayloads: unknown[] = []
-      hooks.onBroadcast('activity', (payload) => { activityPayloads.push(payload) })
+    it('fires registered side-channel when matching option key is present', async () => {
+      const sidePayloads: unknown[] = []
+
+      hooks.registerSideChannel('activity', {
+        broadcastName: 'activity',
+        buildPayload: ({ broadcastName, payload, optionValue }) => ({
+          broadcastName,
+          activity: optionValue,
+          metadata: payload,
+        }),
+      })
+
+      hooks.onBroadcast('activity', (payload) => { sidePayloads.push(payload) })
 
       await hooks.broadcast(
         'billing:wallet_low',
-        { walletId: 'wal_1', scopeId: 'loc_1', userId: 'usr_1' },
+        { walletId: 'wal_1' },
         { activity: { entityType: 'wallet', entityId: 'wal_1', action: 'low_balance' } }
       )
 
-      expect(activityPayloads).toHaveLength(1)
-      expect(activityPayloads[0]).toMatchObject({
+      expect(sidePayloads).toHaveLength(1)
+      expect(sidePayloads[0]).toMatchObject({
         broadcastName: 'billing:wallet_low',
-        toolId: 'billing',
         activity: { entityType: 'wallet', entityId: 'wal_1', action: 'low_balance' },
+        metadata: { walletId: 'wal_1' },
       })
+    })
+
+    it('does not fire side-channel when option key is absent', async () => {
+      const sidePayloads: unknown[] = []
+
+      hooks.registerSideChannel('activity', {
+        broadcastName: 'activity',
+        buildPayload: ({ optionValue }) => ({ activity: optionValue }),
+      })
+
+      hooks.onBroadcast('activity', (payload) => { sidePayloads.push(payload) })
+
+      await hooks.broadcast('billing:wallet_low', { walletId: 'wal_1' })
+      expect(sidePayloads).toHaveLength(0)
+    })
+
+    it('supports multiple side-channels on one broadcast', async () => {
+      const activityPayloads: unknown[] = []
+      const auditPayloads: unknown[] = []
+
+      hooks.registerSideChannel('activity', {
+        broadcastName: 'activity',
+        buildPayload: ({ optionValue }) => ({ activity: optionValue }),
+      })
+      hooks.registerSideChannel('audit', {
+        broadcastName: 'audit:log',
+        buildPayload: ({ broadcastName, optionValue }) => ({ source: broadcastName, audit: optionValue }),
+      })
+
+      hooks.onBroadcast('activity', (p) => { activityPayloads.push(p) })
+      hooks.onBroadcast('audit:log', (p) => { auditPayloads.push(p) })
+
+      await hooks.broadcast(
+        'contact:created',
+        { id: 'ct_1' },
+        { activity: { action: 'created' }, audit: { level: 'info' } }
+      )
+
+      expect(activityPayloads).toHaveLength(1)
+      expect(auditPayloads).toHaveLength(1)
+      expect(auditPayloads[0]).toMatchObject({ source: 'contact:created', audit: { level: 'info' } })
+    })
+
+    it('catches side-channel buildPayload errors and continues', async () => {
+      const calls: string[] = []
+
+      hooks.registerSideChannel('bad', {
+        broadcastName: 'bad:channel',
+        buildPayload: () => { throw new Error('buildPayload boom') },
+      })
+
+      hooks.onBroadcast('test:event', () => { calls.push('main') })
+
+      await hooks.broadcast('test:event', {}, { bad: true })
+      expect(calls).toEqual(['main'])
+      expect(defaultErrorHandler).toHaveBeenCalledOnce()
+    })
+
+    it('catches side-channel listener errors and continues', async () => {
+      const calls: string[] = []
+
+      hooks.registerSideChannel('audit', {
+        broadcastName: 'audit:log',
+        buildPayload: ({ optionValue }) => ({ audit: optionValue }),
+      })
+
+      hooks.onBroadcast('audit:log', () => { throw new Error('listener boom') })
+      hooks.onBroadcast('audit:log', () => { calls.push('second listener survived') })
+
+      await hooks.broadcast('test:event', {}, { audit: { level: 'info' } })
+      expect(calls).toEqual(['second listener survived'])
+      expect(defaultErrorHandler).toHaveBeenCalledOnce()
     })
   })
 
@@ -175,9 +260,6 @@ describe('HookSystem', () => {
     })
 
     it('catches filter errors and continues with previous value', async () => {
-      const errorHandler = vi.fn()
-      setHookErrorHandler(errorHandler)
-
       hooks.addFilter<number>('test:err', (v) => v + 1)
       hooks.addFilter<number>('test:err', () => { throw new Error('boom') })
       hooks.addFilter<number>('test:err', (v) => v + 100)
@@ -187,9 +269,7 @@ describe('HookSystem', () => {
       // Second filter: throws, value stays 1
       // Third filter: 1 + 100 = 101
       expect(result).toBe(101)
-      expect(errorHandler).toHaveBeenCalledOnce()
-
-      setHookErrorHandler(() => {})
+      expect(defaultErrorHandler).toHaveBeenCalledOnce()
     })
   })
 
@@ -207,16 +287,25 @@ describe('HookSystem', () => {
     })
 
     it('removePluginRegistrations clears all registrations for a plugin', async () => {
+      const broadcastCalls: string[] = []
       const scoped = hooks.createScopedAPI('my-tool')
       scoped.addAction('my-tool:do', () => 'ok')
-      scoped.onBroadcast('my-tool:event', () => {})
-      scoped.addFilter('my-tool:filter', (v) => v)
+      scoped.onBroadcast('my-tool:event', () => { broadcastCalls.push('should not fire') })
+      scoped.addFilter<string>('my-tool:filter', (v) => v + '-modified')
 
       hooks.removePluginRegistrations('my-tool')
 
       // Action should be gone
-      const result = await hooks.tryAction('my-tool:do', null)
-      expect(result).toBeNull()
+      const actionResult = await hooks.tryAction('my-tool:do', null)
+      expect(actionResult).toBeNull()
+
+      // Broadcast listener should be gone
+      await hooks.broadcast('my-tool:event', {})
+      expect(broadcastCalls).toEqual([])
+
+      // Filter should be gone — initial value passes through unchanged
+      const filterResult = await hooks.applyFilter('my-tool:filter', 'original')
+      expect(filterResult).toBe('original')
     })
 
     it('creating a new scoped API cleans previous registrations', async () => {

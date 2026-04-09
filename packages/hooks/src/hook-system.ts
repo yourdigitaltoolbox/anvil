@@ -17,6 +17,7 @@ import type {
   FilterOptions,
   FilterQueryOptions,
   HookAPI,
+  SideChannelConfig,
 } from './types.ts'
 
 // ---------------------------------------------------------------------------
@@ -83,6 +84,7 @@ export class HookSystem implements HookAPI {
   private readonly broadcastListeners = new Map<string, BroadcastRegistration[]>()
   private readonly filters = new Map<string, FilterRegistration[]>()
   private readonly declaredHooks = new Set<string>()
+  private readonly sideChannels = new Map<string, SideChannelConfig>()
 
   // -------------------------------------------------------------------------
   // Actions (request/response)
@@ -162,40 +164,31 @@ export class HookSystem implements HookAPI {
       }
     }
 
-    // Side-channel: activity logging
-    if (options?.activity) {
-      const p = payload as Record<string, unknown> | null | undefined
-      const activityPayload = {
-        broadcastName: name,
-        toolId: (p?.toolId as string) ?? name.split(':')[0],
-        scope: (p?.scope as string) ?? '',
-        scopeId: (p?.scopeId ?? '') as string,
-        userId: (p?.userId ?? '') as string,
-        activity: options.activity,
-        metadata: p ?? undefined,
-      }
-      const activityListeners = this.broadcastListeners.get('activity')
-      if (activityListeners) {
-        for (const reg of activityListeners) {
+    // Generic side-channels: fire registered side-channel broadcasts
+    // for each matching key in options
+    if (options) {
+      for (const [optionKey, config] of this.sideChannels) {
+        if (options[optionKey] != null) {
+          let sidePayload: unknown
           try {
-            await reg.callback(activityPayload)
+            sidePayload = config.buildPayload({
+              broadcastName: name,
+              payload,
+              optionValue: options[optionKey],
+            })
           } catch (error) {
-            errorHandler({ hookType: 'broadcast', hookName: 'activity', pluginId: reg.pluginId }, error)
+            errorHandler({ hookType: 'broadcast', hookName: config.broadcastName, pluginId: undefined }, error)
+            continue
           }
-        }
-      }
-    }
-
-    // Side-channel: notifications
-    if (options?.notification) {
-      const metadataPayload = { options }
-      const metadataListeners = this.broadcastListeners.get('broadcast:metadata')
-      if (metadataListeners) {
-        for (const reg of metadataListeners) {
-          try {
-            await reg.callback(metadataPayload)
-          } catch (error) {
-            errorHandler({ hookType: 'broadcast', hookName: 'broadcast:metadata', pluginId: reg.pluginId }, error)
+          const listeners = this.broadcastListeners.get(config.broadcastName)
+          if (listeners) {
+            for (const reg of listeners) {
+              try {
+                await reg.callback(sidePayload)
+              } catch (error) {
+                errorHandler({ hookType: 'broadcast', hookName: config.broadcastName, pluginId: reg.pluginId }, error)
+              }
+            }
           }
         }
       }
@@ -282,6 +275,14 @@ export class HookSystem implements HookAPI {
   }
 
   // -------------------------------------------------------------------------
+  // Side Channels
+  // -------------------------------------------------------------------------
+
+  registerSideChannel(optionKey: string, config: SideChannelConfig): void {
+    this.sideChannels.set(optionKey, config)
+  }
+
+  // -------------------------------------------------------------------------
   // Hook declaration
   // -------------------------------------------------------------------------
 
@@ -358,6 +359,7 @@ export class HookSystem implements HookAPI {
         this.applyFilter(hookName, initialValue, options),
       applyFilterSync: (hookName, initialValue, options) =>
         this.applyFilterSync(hookName, initialValue, options),
+      registerSideChannel: (optionKey, config) => this.registerSideChannel(optionKey, config),
       registerHook: (hookName) => this.declaredHooks.add(hookName),
       createScopedAPI: (childId) => this.createScopedAPI(childId),
       removePluginRegistrations: (targetId) => this.removePluginRegistrations(targetId),
