@@ -25,7 +25,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ## Current State
 
-**Core framework complete.** Eight packages built. 76 tests passing. Example app running end-to-end.
+**Core framework complete. Server v0.2 done.** Ten packages built. 98 tests passing. Example app running end-to-end.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
 - Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
@@ -41,8 +41,10 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - `registerSideChannel()` — generic side-channel mechanism
 - Zero dependencies, framework-agnostic
 
-### `@ydtb/anvil-server` — ✅ FUNCTIONAL (7 tests)
+### `@ydtb/anvil-server` — ✅ DONE (21 tests)
 - `createServer(config)` — Hono app, middleware, health endpoints, boot sequence, shutdown
+- `createWorker(config)` — same boot, no HTTP. Collects jobs from tool surfaces.
+- `createSpaHandler({ routes, renderShell })` — flat route matching, loader execution, app renders HTML
 - `getLayer(key)` — synchronous layer access via Effect ManagedRuntime
 - `getHooks()` — hook system access, module-level singleton
 - `getContributions(extensionId)` — typed accessor for extension contributions
@@ -50,9 +52,11 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - Lifecycle manager — Effect layer composition, `_effectLayer: { tag, layer }` contract, health checks, graceful shutdown
 - Surface processor — registers hooks, extracts routers, collects extension contributions
 - Route mounting — Hono sub-apps at `/api/{toolId}/*`
+- Error handling — Hono `onError` catches unhandled errors, reports to ErrorLayer, returns clean JSON
 - `fromOrpc()` — wraps oRPC handlers for framework-agnostic mounting
 - `createLayerConfig()` — enforced layer authoring helper
 - `toolEntry()` — convenience helper for manual tool wiring
+- Shared boot sequence (`boot.ts`) used by both createServer and createWorker
 - `/healthz` (liveness) + `/readyz` (layer health checks with latency)
 - `ServerConfig` accepts middleware array and app-level routes
 
@@ -75,6 +79,20 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - Effect `acquireRelease` manages pool creation/teardown
 - Health check runs `SELECT 1` with latency measurement
 - Defines `DatabaseLayer` contract (`{ db: PostgresJsDatabase, sql: Sql }`), augments `LayerMap`
+
+### `@ydtb/anvil-layer-sentry` — ✅ DONE (3 tests)
+- `sentry()` factory — initializes Sentry SDK, captures with context
+- `noopErrors()` — logs to console or silent for tests
+- `ErrorLayer` contract: `capture`, `setUser`, `addBreadcrumb`
+- Effect acquireRelease — flushes pending events on shutdown
+- Integrated with server error handler — unhandled route errors auto-reported
+
+### `@ydtb/anvil-layer-redis` — ✅ DONE (8 tests)
+- `redis()` factory — ioredis with connection lifecycle, key prefix, health check
+- `memory()` factory — in-memory Map with TTL expiration for dev/test
+- `CacheLayer` contract: `get`, `set`, `del`, `has`, `getMany`, `delPattern`
+- TTL support on set, periodic cleanup in memory variant
+- Both variants implement identical contract — swap one line in compose.config
 
 ### `@ydtb/anvil-client` — ✅ DONE (15 tests)
 - `assembleRoutes(scopeTree, tools)` — pure function: scope tree + tool surfaces → scope-grouped route structure
@@ -106,25 +124,24 @@ Surfaces handle **structural** communication (what a tool IS). Hooks handle **ru
 
 ## What's Next
 
-**The core framework is complete.** All five packages are built, tested, and pushed. Remaining work is incremental.
+**Core framework and server v0.2 complete.** All five core packages + four layer packages built, tested, and pushed.
 
-### Priority 1: Server v0.2 enhancements
-- `createWorker(config)` — job processing without HTTP
-- Scope-aware SPA handler — branded HTML shell from URL parsing (Tier 1)
-- Sentry / error reporting — ErrorLayer integration
-
-### Priority 2: More layer packages
+### Priority 1: Remaining layer packages
 Pattern is proven. Build as needed:
-- `@ydtb/anvil-layer-redis` — CacheLayer
-- `@ydtb/anvil-layer-bullmq` — JobLayer
-- `@ydtb/anvil-layer-sentry` — ErrorLayer
-- `@ydtb/anvil-layer-resend` — EmailLayer
-- `@ydtb/anvil-layer-s3` — StorageLayer
+- `@ydtb/anvil-layer-bullmq` — JobLayer (cron scheduling, trigger-based execution)
+- `@ydtb/anvil-layer-resend` — EmailLayer (transactional email)
+- `@ydtb/anvil-layer-s3` — StorageLayer (file/blob storage)
 
-### Priority 3: Extension packages (YDTB-specific)
+### Priority 2: Extension packages (YDTB-specific)
 Build during YDTB migration phase:
 - `@myapp/ext-onboarding`, `@myapp/ext-search`, `@myapp/ext-dashboard`
 - `@myapp/ext-notifications`, `@myapp/ext-credentials`, `@myapp/ext-activity`
+
+### Priority 3: Dev experience
+- Dev server (Vite for client + server process with watch)
+- Workspace alias resolver (kills 158-alias file in YDTB)
+- Getting started guide / documentation
+- `turbo run test` from root wired up
 
 ## Key Design Decisions
 
@@ -138,8 +155,9 @@ Build during YDTB migration phase:
 - **Edge compatibility** is a design constraint — avoid Node-only patterns. Layer implementations determine runtime compatibility (postgres → neon-http for edge).
 - **`createServer` accepts middleware array** — app-level middleware (CORS, auth, rate limiting). Tools don't add middleware.
 - **App-level routes on `createServer`** — non-tool routes (settings, API keys) via `routes` config.
-- **Scope-aware rendering** — 3 tiers: branded shell (backlog), streaming SSR (backlog), per-route loaders (backlog). Tier 1 handler must not block Tiers 2 and 3.
-- **Worker separation** — `createWorker()` is a separate entry point (v0.2).
+- **SPA handler is flat route matching** — no scope-URL parsing assumptions. Routes are a flat list with full URL patterns. Framework matches URL → runs loader if present → calls app's renderShell. App owns the HTML completely. Supports Tier 1 (static shell), Tier 2 (streaming SSR), Tier 3 (per-route loaders) — app chooses, framework doesn't decide.
+- **Caching is a layer, not a framework feature** — CacheLayer provides get/set/del/has/getMany/delPattern. Framework could provide cache helpers (SPA shell caching, loader caching, API middleware) that use the CacheLayer — but caching policy is always the app's decision.
+- **Worker separation** — `createWorker()` shares boot sequence with `createServer()` via `boot.ts`. Same layers, hooks, surfaces. No HTTP.
 
 ## Concept Model
 
@@ -554,7 +572,16 @@ Frameworks reviewed during Session 1, ranked by architectural similarity:
 - **`@ydtb/anvil-client`** — client runtime. assembleRoutes(), createApiClient(), useLayer/LayerProvider, useScope/ScopeProvider. 15 tests.
 - **Surfaces vs Hooks** clarified — surfaces for structural (what a tool IS), hooks for runtime (what happens when X OCCURS). Replaces YDTB's "everything through hooks" pattern.
 
-**Session 2 totals:** 8 packages, 76 tests, ~6,200 lines, 8 commits pushed to remote. Core framework complete.
+**Continued — server v0.2 + layer packages:**
+- **`createWorker`** — shared boot.ts, no HTTP, collects jobs. 2 tests.
+- **Error handling** — Hono onError, reports to ErrorLayer, clean JSON responses. 1 test.
+- **`@ydtb/anvil-layer-sentry`** — sentry() + noopErrors(). Effect acquireRelease for flush. 3 tests.
+- **SPA handler** — flat route matching (not scope-URL parsing). Loader execution. App-owned renderShell. Framework-agnostic. 8 tests.
+- **`@ydtb/anvil-layer-redis`** — redis() + memory(). Full CacheLayer contract with TTL, getMany, delPattern. 8 tests.
+- **Caching architecture** — one CacheLayer, framework provides helpers, app decides policy.
+- **Surfaces vs hooks** — structural (surfaces) vs runtime (hooks) clarified.
+
+**Session 2 totals:** 10 packages, 98 tests, ~8,000+ lines, 14 commits pushed to remote. Core framework + server v0.2 + 4 layer packages complete.
 
 ### Session 1 (2026-04-08)
 - Reviewed Effect-TS as potential infrastructure layer — decided to use internally in server, not expose to tools
