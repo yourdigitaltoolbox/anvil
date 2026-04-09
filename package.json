@@ -12,6 +12,8 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
+    "effect": "^3.21.0",
+    "hono": "^4.12.12",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0"
   }

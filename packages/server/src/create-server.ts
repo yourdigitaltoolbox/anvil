@@ -139,6 +139,15 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     const extensions = config.extensions ?? []
     const processed = processSurfaces(hooks, tools, extensions)
 
+    // 3b. Make extension contributions available via hooks
+    for (const [extId, items] of Object.entries(processed.contributions)) {
+      if (items.length > 0) {
+        const contributionItems = items
+        hooks.addFilter(`ext:${extId}:contributions`, () => contributionItems)
+        logger.info({ extensionId: extId, count: items.length }, 'Registered extension contributions')
+      }
+    }
+
     // 4. Mount tool and extension routers
     for (const [id, router] of Object.entries(processed.routers)) {
       if (router instanceof Hono) {
