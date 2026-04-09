@@ -27,7 +27,7 @@ export { createServer } from './create-server.ts'
 export type { ServerConfig, AnvilServer } from './create-server.ts'
 
 // Accessors
-export { getLayer, getHooks } from './accessors.ts'
+export { getLayer, getHooks, getContributions } from './accessors.ts'
 
 // Request context
 export { getRequestContext, getLogger } from './request-context.ts'
@@ -36,11 +36,15 @@ export type { RequestContext } from './request-context.ts'
 // Lifecycle (for advanced use / testing)
 export type { LifecycleManager } from './lifecycle.ts'
 
-// Surface types (for virtual module authors)
+// Surface types and helpers
+export { toolEntry } from './surfaces.ts'
 export type { ToolEntry, ProcessedSurfaces } from './surfaces.ts'
 
 // Router helpers
 export { fromOrpc } from './from-orpc.ts'
 
+// Layer authoring helpers
+export { createLayerConfig } from './layer-helpers.ts'
+
 // Test helpers
-export { provideLayerResolver, provideHookSystem } from './accessors.ts'
+export { provideLayerResolver, provideHookSystem, provideContributions } from './accessors.ts'

@@ -25,7 +25,7 @@ import type { AppConfig } from '@ydtb/anvil'
 import type { MiddlewareHandler } from 'hono'
 import { requestContext, createConsoleLogger, getLogger } from './request-context.ts'
 import type { RequestContext } from './request-context.ts'
-import { provideHookSystem } from './accessors.ts'
+import { provideHookSystem, provideContributions } from './accessors.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
 import { processSurfaces } from './surfaces.ts'
@@ -139,12 +139,11 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     const extensions = config.extensions ?? []
     const processed = processSurfaces(hooks, tools, extensions)
 
-    // 3b. Make extension contributions available via hooks
+    // 3b. Make extension contributions available via getContributions()
+    provideContributions(processed.contributions)
     for (const [extId, items] of Object.entries(processed.contributions)) {
       if (items.length > 0) {
-        const contributionItems = items
-        hooks.addFilter(`ext:${extId}:contributions`, () => contributionItems)
-        logger.info({ extensionId: extId, count: items.length }, 'Registered extension contributions')
+        logger.info({ extensionId: extId, count: items.length }, 'Collected extension contributions')
       }
     }
 
@@ -200,6 +199,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
 
     // Clean up accessors
     provideHookSystem(null)
+    provideContributions(null)
 
     // Shut down layers (releases resources in reverse order)
     if (lifecycle) {

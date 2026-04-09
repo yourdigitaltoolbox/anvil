@@ -4,14 +4,15 @@
  * Demonstrates the full layer authoring pattern:
  * 1. Define the contract interface
  * 2. Augment LayerMap via declaration merging
- * 3. Export a factory function returning LayerConfig
- * 4. Provide a health check
+ * 3. Create an Effect tag and layer
+ * 4. Export a factory using createLayerConfig()
  *
  * In a real app, this would be @ydtb/anvil-layer-postgres or similar.
  */
 
 import { Context, Effect, Layer } from 'effect'
-import type { LayerConfig, HealthStatus } from '../../packages/anvil/src/index.ts'
+import type { LayerConfig } from '../../packages/anvil/src/index.ts'
+import { createLayerConfig } from '../../packages/server/src/index.ts'
 
 // ---------------------------------------------------------------------------
 // 1. Define the contract
@@ -24,23 +25,23 @@ export interface StoreLayer {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Augment LayerMap — makes `store` a required key in defineApp
+// 2. Augment LayerMap
 // ---------------------------------------------------------------------------
 
-declare module '@ydtb/anvil' {
+declare module '../../packages/anvil/src/index.ts' {
   interface LayerMap {
     store: StoreLayer
   }
 }
 
 // ---------------------------------------------------------------------------
-// 3. Effect internals (layer authors see this, tool authors don't)
+// 3. Effect internals
 // ---------------------------------------------------------------------------
 
 const StoreTag = Context.GenericTag<StoreLayer>('Store')
 
 // ---------------------------------------------------------------------------
-// 4. Factory function — what the app calls in compose.config.ts
+// 4. Factory using createLayerConfig — enforces correct shape
 // ---------------------------------------------------------------------------
 
 export function memoryStore(): LayerConfig<'store'> {
@@ -52,15 +53,7 @@ export function memoryStore(): LayerConfig<'store'> {
     keys: () => [...data.keys()],
   }
 
-  return {
-    id: 'store',
-    _effectLayer: {
-      tag: StoreTag,
-      layer: Layer.succeed(StoreTag, service),
-    },
-    _healthCheck: Effect.succeed({
-      status: 'ok' as const,
-      latencyMs: 0,
-    } satisfies HealthStatus),
-  }
+  return createLayerConfig('store', StoreTag, Layer.succeed(StoreTag, service), {
+    healthCheck: Effect.succeed({ status: 'ok' as const, latencyMs: 0 }),
+  })
 }

@@ -11,14 +11,14 @@
  *   curl http://localhost:3000/api/widgets
  */
 
-import { createServer } from '../../packages/server/src/index.ts'
+import { createServer, toolEntry } from '../../packages/server/src/index.ts'
 import config from './compose.config.ts'
 import { greeterServer } from './tool-greeter.ts'
 
 const server = createServer({
   config,
   tools: [
-    { id: 'greeter', module: { default: greeterServer } },
+    toolEntry('greeter', greeterServer),
   ],
   port: 3000,
 })

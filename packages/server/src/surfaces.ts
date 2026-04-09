@@ -22,6 +22,27 @@ export interface ToolEntry {
   module: { default?: Server }
 }
 
+/**
+ * Create a tool entry for passing to createServer.
+ *
+ * Convenience helper that avoids the verbose `{ id, module: { default } }` shape.
+ * The virtual module plugin generates these automatically — this helper is for
+ * manual wiring when the build plugin isn't available.
+ *
+ * @example
+ * ```ts
+ * import { toolEntry } from '@ydtb/anvil-server'
+ * import { greeterServer } from './tools/greeter/server'
+ *
+ * createServer({
+ *   tools: [toolEntry('greeter', greeterServer)],
+ * })
+ * ```
+ */
+export function toolEntry(id: string, surface: Server): ToolEntry {
+  return { id, module: { default: surface } }
+}
+
 export interface ProcessedSurfaces {
   /** Map of tool/extension ID → router */
   routers: Record<string, unknown>

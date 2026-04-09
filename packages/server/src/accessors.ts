@@ -100,3 +100,42 @@ export function getHooks(): HookSystem {
   }
   return _hookSystem
 }
+
+// ---------------------------------------------------------------------------
+// Extension Contributions
+// ---------------------------------------------------------------------------
+
+let _contributions: Record<string, unknown[]> = {}
+
+/**
+ * Provide collected extension contributions. Called internally by
+ * createServer() after processing surfaces.
+ *
+ * @internal
+ */
+export function provideContributions(contributions: Record<string, unknown[]> | null): void {
+  _contributions = contributions ?? {}
+}
+
+/**
+ * Access collected contributions for an extension.
+ *
+ * Extensions call this in their route handlers or hooks to retrieve
+ * the data that tools contributed to them via server surfaces.
+ *
+ * @param extensionId - The extension's id (e.g. 'widgets', 'search')
+ * @returns Array of contribution objects from all tools, typed via generic
+ *
+ * @example
+ * ```ts
+ * import { getContributions } from '@ydtb/anvil-server'
+ * import type { WidgetEntry } from './types'
+ *
+ * // In an extension's route handler:
+ * const widgets = getContributions<{ items: WidgetEntry[] }>('widgets')
+ * // Returns: [{ toolId: 'greeter', items: [...] }, { toolId: 'billing', items: [...] }]
+ * ```
+ */
+export function getContributions<T = unknown>(extensionId: string): Array<T & { toolId: string }> {
+  return (_contributions[extensionId] ?? []) as Array<T & { toolId: string }>
+}

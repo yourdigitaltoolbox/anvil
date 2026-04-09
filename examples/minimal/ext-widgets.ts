@@ -12,7 +12,7 @@
 
 import { Hono } from 'hono'
 import { defineExtension } from '../../packages/anvil/src/index.ts'
-import { getHooks } from '../../packages/server/src/index.ts'
+import { getContributions } from '../../packages/server/src/index.ts'
 
 // ---------------------------------------------------------------------------
 // 1. Define contribution types
@@ -41,10 +41,9 @@ declare module '@ydtb/anvil' {
 const widgetRouter = new Hono()
 
 widgetRouter.get('/', (c) => {
-  // Retrieve collected contributions via the hook system
-  const hooks = getHooks()
-  const widgets = hooks.applyFilterSync('ext:widgets:contributions', [] as WidgetEntry[])
-  return c.json({ widgets })
+  const contributions = getContributions<{ items: WidgetEntry[] }>('widgets')
+  const allWidgets = contributions.flatMap((c) => c.items)
+  return c.json({ widgets: allWidgets })
 })
 
 // ---------------------------------------------------------------------------
