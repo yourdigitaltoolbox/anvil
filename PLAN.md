@@ -102,7 +102,7 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 
 ## Priority D: Framework Polish (NICE TO HAVE — not blocking migration)
 
-### D1: ⬜ `turbo run test` from root
+### D1: ✅ `turbo run test` from root
 - Wire up turborepo test script
 - All packages run tests via single command
 - CI-ready
