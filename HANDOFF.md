@@ -25,78 +25,113 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ## Current State
 
-Two packages are committed:
+Seven packages built. 61 tests passing. Example app running end-to-end.
 
-### `@ydtb/anvil` (core types) — REWORKED ✅
-- `defineApp`, `defineTool`, `scope` — composition root primitives
-- `defineClient`, `defineServer` — tool surface definitions with core/contributions split
-- `defineExtension` — fifth primitive, app-level systems with tool contribution contracts
-- `LayerMap`, `ClientContributions`, `ServerContributions` — all empty interfaces, augmented via declaration merging
+### `@ydtb/anvil` (core types) — ✅ DONE
+- Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
+- Universal extensibility: `LayerMap`, `ClientContributions`, `ServerContributions` — all empty, augmented via declaration merging
 - `LayerConfig`, `RequiredLayers` — derive from `LayerMap`, no hardcoded layer contracts
-- `ClientCore` / `ServerCore` — framework-owned surface fields
-- `AppConfig` includes `extensions` field
-- Zero runtime dependencies, zero Effect dependency, compiles clean
-- No implementation logic — just types and identity functions
+- `ClientCore` / `ServerCore` — framework-owned surface fields, separate from extension contributions
+- Zero runtime dependencies, zero Effect dependency
 
-### `@ydtb/anvil-server` — IN PROGRESS
-- `createServer(config)` — boots layers, creates Hono app, processes tool/extension surfaces, health endpoints, shutdown
+### `@ydtb/anvil-hooks` — ✅ DONE (27 tests)
+- `HookSystem` class — actions, broadcasts, filters
+- `createTypedHooks()` — compile-time safe wrappers
+- `setHookErrorHandler()` — pluggable error handler
+- `registerSideChannel()` — generic side-channel mechanism
+- Zero dependencies, framework-agnostic
+
+### `@ydtb/anvil-server` — ✅ FUNCTIONAL (7 tests)
+- `createServer(config)` — Hono app, middleware, health endpoints, boot sequence, shutdown
 - `getLayer(key)` — synchronous layer access via Effect ManagedRuntime
 - `getHooks()` — hook system access, module-level singleton
-- `getRequestContext()` — AsyncLocalStorage per-request state (requestId, userId, scopeId, logger)
-- `getLogger()` — console fallback during boot, LogLayer once available
-- Lifecycle manager — Effect layer composition, health checks (`/readyz`), graceful shutdown
-- Surface processor — registers hooks, extracts routers, collects extension contributions from tools
-- Health endpoints — `/healthz` (liveness, 200 always), `/readyz` (layer health checks)
+- `getContributions(extensionId)` — typed accessor for extension contributions
+- `getRequestContext()` / `getLogger()` — per-request state, console fallback → LogLayer once booted
+- Lifecycle manager — Effect layer composition, `_effectLayer: { tag, layer }` contract, health checks, graceful shutdown
+- Surface processor — registers hooks, extracts routers, collects extension contributions
+- Route mounting — Hono sub-apps at `/api/{toolId}/*`
+- `fromOrpc()` — wraps oRPC handlers for framework-agnostic mounting
+- `createLayerConfig()` — enforced layer authoring helper
+- `toolEntry()` — convenience helper for manual tool wiring
+- `/healthz` (liveness) + `/readyz` (layer health checks with latency)
 - `ServerConfig` accepts middleware array and app-level routes
-- 4 integration tests passing (full boot→request→shutdown cycle)
-- Dependencies: hono, effect, @ydtb/anvil, @ydtb/anvil-hooks
-- **Still stubbed:** Route mounting (routers logged but not actually mounted to Hono), HTTP listener (port binding)
-- **Layer contract for `_effectLayer`:** Must be `{ tag: Context.Tag, layer: Layer.Layer }` — layer packages provide both the Effect tag and layer, lifecycle module resolves via the tag
 
-### `@ydtb/anvil-hooks` — done
-- `HookSystem` class — full hook engine extracted from YDTB `packages/plugin-sdk/src/hook-system.ts`
-- Three primitives: actions (1:1 request/response), broadcasts (1:N fire-and-forget), filters (N-stage waterfall)
-- `createTypedHooks()` in `@ydtb/anvil-hooks/typed` — compile-time safe wrappers (NEW — YDTB doesn't have this yet)
-- `setHookErrorHandler()` — pluggable error handler (replaces hardcoded console.error)
-- `registerSideChannel()` — generic side-channel mechanism (replaces hardcoded YDTB activity/notification logic)
-- 27 tests, all passing
-- Zero dependencies, framework-agnostic
+### `@ydtb/anvil-build` — ✅ DONE (16 tests)
+- `anvilPlugin(config)` — Vite/Rollup plugin generating virtual modules
+- Virtual modules: `virtual:anvil/server-tools`, `virtual:anvil/client-tools`, `virtual:anvil/schema`, `virtual:anvil/scope-tree`, `virtual:anvil/permissions`, `virtual:anvil/extensions`
+- `collectTools()` / `collectToolsWithScopes()` — scope tree traversal with deduplication
+- Type declarations for all virtual modules (`virtual.d.ts`)
+- Works with both Vite (client) and Rollup (server) builds
+
+### `@ydtb/anvil-layer-pino` — ✅ DONE (7 tests)
+- `pino()` factory — JSON in production, pretty in dev
+- `silent()` factory — no-op logger for tests
+- Defines `LoggingLayer` contract, augments `LayerMap`
+- Integrated with `getLogger()` — request context loggers use pino after boot
+
+### `@ydtb/anvil-layer-postgres` — ✅ DONE (4 tests)
+- `postgres()` factory — connection pool via postgres.js + Drizzle ORM
+- `testPostgres()` — small pool, short timeouts for test suites
+- Effect `acquireRelease` manages pool creation/teardown
+- Health check runs `SELECT 1` with latency measurement
+- Defines `DatabaseLayer` contract (`{ db: PostgresJsDatabase, sql: Sql }`), augments `LayerMap`
+
+### Example App — ✅ RUNNING
+- `examples/minimal/` — compose.config + layer + extension + tool + server entry
+- Demonstrates all five primitives working together
+- Runnable with `bun run examples/minimal/server.ts`, curlable endpoints
 
 ## What's Next
 
-**`@ydtb/anvil-server`** — the server runtime. This is the biggest package. It replaces Nitro in YDTB and provides:
+### Priority 1: `@ydtb/anvil-client` — NOT STARTED
+The last major framework package. Makes Anvil full-stack.
 
-1. **Lifecycle manager** — resource registry with health checks and shutdown derived automatically
-2. **`createServer(config)`** — boots HTTP server (**Hono** — decided Session 2), mounts RPC handlers, registers tool surfaces
-3. **`createWorker(config)`** — same tool surfaces, job processing only, no HTTP
-4. **`getLayer(key)`** — access layers provided by the composition root
-5. **Request context** — `AsyncLocalStorage<RequestContext>` wrapping every request with requestId, userId, scopeId, child logger
-6. **Structured logging** — pino, JSON in production, pretty in dev
-7. **Scope-aware SPA handler** — parses scope from URL, returns branded HTML shell (streaming SSR-ready for future tiers)
-8. **Error reporting** — Sentry integration
+Needs to provide:
+- **Client surface registration** — collects client surfaces from tools via virtual modules
+- **Scope-aware routing** — React routing from scope tree + tool route declarations (TanStack Router)
+- **`useLayer()`** — React hook for client-side layers (analytics, feature flags)
+- **`clientLayers`** on `defineApp` — swappable client-side services via React context
+- **API client factory** — typed oRPC clients per tool
+- **`LayerProvider`** — React context provider for test/Storybook mocking
 
-Reference YDTB files for patterns:
-- `packages/app/src/server/infra-boot.ts` — infrastructure boot sequence
-- `packages/app/src/server/routes/rpc-handler.ts` — oRPC handler mounting
-- `packages/app/src/server/routes/spa-fallback-route.ts` — current SPA fallback (to be replaced with scope-aware version)
-- `packages/app/src/server/plugins/jobs.ts` — current Nitro plugin (to be replaced with lifecycle hook)
-- `packages/app/src/server/lib/rate-limiter.ts` — current in-memory rate limiter (to be made pluggable)
-- `packages/compose/src/server-boot.ts` — tool surface processing
-- `packages/compose/src/composition-router.ts` — auto-assembled oRPC router
+Reference YDTB files:
+- `packages/compose/src/registry.ts` — surface registration, plugin loader bridge
+- `packages/compose/src/client.ts` — API client factory
+- `packages/app/src/client/boot-client.tsx` — client bootstrap, scope contexts
+- `packages/app/src/client/createApp.tsx` — React app shell, route assembly
 
-After server, the build order is:
-- `@ydtb/anvil-build` — virtual module plugin + workspace resolver (kills 158-alias file in YDTB)
-- `@ydtb/anvil-client` — client surface registration + useLayer + API client factory
-- Layer packages — postgres, pino, sentry first
+### Priority 2: Server v0.2 enhancements
+- `createWorker(config)` — job processing without HTTP
+- Scope-aware SPA handler — branded HTML shell from URL parsing (Tier 1)
+- Sentry / error reporting — ErrorLayer integration
+
+### Priority 3: More layer packages
+Pattern is proven. Build as needed:
+- `@ydtb/anvil-layer-redis` — CacheLayer
+- `@ydtb/anvil-layer-bullmq` — JobLayer
+- `@ydtb/anvil-layer-sentry` — ErrorLayer
+- `@ydtb/anvil-layer-resend` — EmailLayer
+- `@ydtb/anvil-layer-s3` — StorageLayer
+
+### Priority 4: Extension packages (YDTB-specific)
+Build during YDTB migration phase:
+- `@myapp/ext-onboarding`, `@myapp/ext-search`, `@myapp/ext-dashboard`
+- `@myapp/ext-notifications`, `@myapp/ext-credentials`, `@myapp/ext-activity`
 
 ## Key Design Decisions
 
-- **Effect is internal to `@ydtb/anvil-server`** — tools never touch Effect unless they opt in. The framework API is plain TypeScript (async/await). Effect manages layer composition, resource lifecycle (acquireRelease), and shutdown guarantees.
-- **Layers are compile-time verified** — `defineApp` requires all layer keys. Miss one → TypeScript error.
-- **Hook system stays plain** — late-bound, dynamic, string-keyed. Typed wrappers are compile-time only. Effect doesn't replace hooks.
-- **`defineClient` / `defineServer`** replace `ClientSurface` / `ServerSurface` naming.
-- **Scope-aware rendering** — 3 tiers: branded shell (implement now), streaming SSR (backlog), per-route loaders (backlog). Tier 1 handler must be built to not block Tiers 2 and 3.
-- **Worker separation** — `createWorker()` is a separate entry point from `createServer()`. Same config, same tools, different runtime profile.
+- **Five primitives** — Composition, Tools, Layers, Hooks, Extensions. Extensions are the fifth primitive for app-level systems (onboarding, search, dashboard, etc.).
+- **Framework ships empty** — `LayerMap`, `ClientContributions`, `ServerContributions` are empty interfaces. All concrete functionality comes from packages via declaration merging.
+- **Effect is internal to `@ydtb/anvil-server`** — tools never touch Effect unless they opt in. Effect manages layer composition, resource lifecycle (acquireRelease), and shutdown guarantees.
+- **`_effectLayer` contract** — must be `{ tag: Context.Tag, layer: Layer.Layer }`. Layer packages provide both. The lifecycle manager resolves services via the tag after ManagedRuntime acquires resources.
+- **Hono** for HTTP — lightweight, Web Standard API, runtime portable (Node/Bun/Deno/edge).
+- **Tool routers are Hono sub-apps** — mounted at `/api/{toolId}/*`. `fromOrpc()` helper wraps oRPC for the common case. Framework has no oRPC dependency.
+- **Logging is a layer** — `getLogger()` returns console during boot, LogLayer logger once available. No pino dependency in the server package.
+- **Edge compatibility** is a design constraint — avoid Node-only patterns. Layer implementations determine runtime compatibility (postgres → neon-http for edge).
+- **`createServer` accepts middleware array** — app-level middleware (CORS, auth, rate limiting). Tools don't add middleware.
+- **App-level routes on `createServer`** — non-tool routes (settings, API keys) via `routes` config.
+- **Scope-aware rendering** — 3 tiers: branded shell (backlog), streaming SSR (backlog), per-route loaders (backlog). Tier 1 handler must not block Tiers 2 and 3.
+- **Worker separation** — `createWorker()` is a separate entry point (v0.2).
 
 ## Concept Model
 
