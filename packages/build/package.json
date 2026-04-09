@@ -7,7 +7,8 @@
     ".": "./src/index.ts",
     "./plugin": "./src/plugin.ts",
     "./vite": "./src/vite-config.ts",
-    "./dev": "./src/dev-server.ts"
+    "./dev": "./src/dev-server.ts",
+    "./dev-middleware": "./src/dev-middleware.ts"
   },
   "scripts": {
     "test": "vitest run",

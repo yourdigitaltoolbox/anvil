@@ -6,15 +6,19 @@
  *
  * Provides:
  * - `anvilPlugin(config, { modules })` — extensible Vite/Rollup plugin
- * - `createDevServer(config)` — Bun --watch + Vite dev server
- * - `createViteConfig(options)` — pre-configured Vite config with proxy
+ * - `createDevMiddleware()` — Vite in middleware mode (single server, single port)
+ * - `createViteConfig(options)` — pre-configured Vite config
  */
 
 export { anvilPlugin } from './plugin.ts'
 export type { AnvilPluginOptions, VirtualModuleGenerator } from './plugin.ts'
 
-export { createDevServer } from './dev-server.ts'
-export type { DevServerConfig } from './dev-server.ts'
+export { createDevMiddleware } from './dev-middleware.ts'
+export type { DevMiddlewareConfig } from './dev-middleware.ts'
 
 export { createViteConfig } from './vite-config.ts'
 export type { ViteConfigOptions } from './vite-config.ts'
+
+// Legacy — kept for backwards compat but not recommended
+export { createDevServer } from './dev-server.ts'
+export type { DevServerConfig } from './dev-server.ts'
