@@ -166,25 +166,101 @@ Tools use two complementary mechanisms for communication:
 
 Surfaces handle **structural** communication (what a tool IS). Hooks handle **runtime** communication (what happens when something OCCURS). This replaces YDTB's "everything through hooks" pattern — hooks were being abused for collecting static data. Now each mechanism does what it's good at.
 
-## What's Next
+## YDTB Migration Plan
 
-**Core framework complete with all 8 layer packages.** 13 packages, 141 tests, all pushed. YDTB consuming project scaffolded.
+Migration from YDTB v1 to ydtb-anvil. Built in `~/projects/ydtb-anvil/`, consuming Anvil as a dependency. Uses the existing YDTB database and tables — change as little as possible.
 
-### Priority 1: Build YDTB extensions and tools (in `~/projects/ydtb-anvil/`)
-These are YDTB-specific, not framework packages. Build in the consuming project:
-- **Extensions first** — onboarding, search, dashboard, notifications, credentials, activity
-- **Then tools** — contacts, billing, team, offers, settings, etc. (migrated from YDTB patterns)
-- Each extension defines its contract via declaration merging on Anvil's surface types
-- Each tool uses `defineClient`/`defineServer` and contributes to installed extensions
+### Key Principles
+- **Bottom-up** — foundation first, but with visual feedback at every phase
+- **Scopes are an extension, not framework or auth** — extracted from better-auth into a proper extension
+- **Auth stays clean** — just users, sessions, API keys. No scope concepts.
+- **Keep existing tables** — migrate schema definitions, not data
+- **Every phase produces something visible** — no "backend-only" phases
 
-### Priority 2: Dev experience (Anvil framework)
+### Phase 1: Foundation + Minimal Client
+Build the bedrock and a visible shell to verify it works.
+
+**Server:**
+- Port 20 platform database tables to Drizzle schema in ydtb-anvil
+- Auth layer — real better-auth (no scope plugin, just auth)
+- Scope extension — port scope CRUD, membership, invites from the better-auth plugin into a proper extension with its own Hono routes
+- Scope middleware — validates membership, populates RequestContext.scopeId
+
+**Client:**
+- Basic app shell — login page, scope selection, empty dashboard layout
+- Scope-aware routing — navigate into scopes, see the chrome
+- Auth gate — redirect to login if not authenticated
+
+**Validates:** Sign in → see scopes → navigate into a scope → see an empty page with sidebar
+
+### Phase 2: Permissions + Team Tool
+First real tool on the platform.
+
+- Port permissions system (RBAC with hierarchical scope resolution)
+- Permission middleware for oRPC endpoints
+- Team tool — member list, invites, role management (uses platform tables, no tool tables)
+
+**Validates:** Sign in → enter scope → manage team → verify permissions block unauthorized actions
+
+### Phase 3: Platform Extensions
+Enrich the shell with cross-cutting features.
+
+- Activity logging (extension — listens to broadcasts, stores audit log)
+- Notifications (extension — delivery engine, notification panel UI)
+- Settings/Preferences (extension — key-value CRUD per scope/user)
+- Onboarding (extension — step wizard, tool-contributed steps)
+- Search (extension — aggregates tool search providers)
+- Credentials/Integrations (extension — OAuth vault, provider registry)
+
+**Validates:** Does the extension model work for real YDTB features?
+
+### Phase 4: Simple Tools
+Prove the tool pattern works.
+
+- Dashboard (1 table, low complexity)
+- Settings UI, Join Codes, Notifications UI
+- These are quick wins that fill out the app
+
+### Phase 5: Complex Tools
+The heavy hitters, migrated once patterns are proven.
+
+- Contacts (7 tables, custom field engine, views)
+- Billing (wallet, Stripe, cascade checks)
+- Offers (location targeting, redemption conditions)
+- GMB (Google API sync)
+- AI Service
+
+### YDTB Audit Summary
+
+| Category | Items | Complexity |
+|---|---|---|
+| Platform tables | 20 | Low-Medium |
+| Tool tables | 25 across 6 tools | Varies |
+| Auth system | better-auth + 1800-line scope plugin | High |
+| Permissions | RBAC + cascading resolution | High |
+| Platform infra | Activity, notifications, tokens, settings, onboarding, search, jobs | Medium-High |
+| Tools | 12 tools, ~380 files | Low to Very High |
+| Integrations | Google, PostHog, Resend | Medium |
+| Client shell | Contexts, auth, routing, ~180 files | Medium |
+| Shared packages | UI, lib, env, test harness | Low |
+
+Total: ~720 TypeScript files (excluding tests and node_modules)
+
+## What's Next (Anvil Framework)
+
+**Core framework complete with all 8 layer packages.** 13 packages, 141 tests, all pushed.
+
+### Priority 1: Support ydtb-anvil migration
+Framework improvements driven by migration needs — add features to Anvil only when ydtb-anvil reveals a gap.
+
+### Priority 2: Dev experience
 - Dev server (Vite for client + server process with watch)
 - `turbo run test` from root wired up
 - Getting started guide / documentation
 
-### Priority 3: Polish (Anvil framework)
+### Priority 3: Polish
 - Cache helpers (SPA shell caching, loader caching middleware)
-- `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback (enables test isolation)
+- `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback
 - API reference documentation
 - npm publishing setup
 
@@ -346,6 +422,20 @@ The framework core ships with all three interfaces empty. Installing packages fi
 - **Removing an extension is safe** — tool contributions to a missing extension are silently ignored
 - **Different Anvil apps can have completely different extensions and layers**
 - **The framework is truly generic** — it provides primitives and plumbing, never policy
+
+### Scope System (YDTB-specific, NOT a framework concept)
+
+**Key architectural decision (Session 2):** Scopes are NOT a framework feature. They're a YDTB extension — an organizational system for grouping parent/child entities (system → companies → locations, or any hierarchy the app defines).
+
+The framework only knows that URL patterns have dynamic segments (`/c/$scopeId`). Everything else is YDTB's concern:
+
+- **Scope extension** — manages scope entities, membership, hierarchy, invitations, join codes. Has its own database tables, routes, and UI. This is what YDTB's better-auth scope plugin becomes — extracted from auth into its own extension.
+- **Scope middleware** — app-provided Hono middleware that reads `x-scope-id`, validates membership, populates `RequestContext.scopeId`.
+- **Auth layer** — stays clean. Just authentication (users, sessions, API keys). No scope concepts.
+
+In YDTB v1, scopes were crammed into the auth layer because that was the only place with database access and middleware. In ydtb-anvil, scope management is a proper extension with clean separation from auth.
+
+Another Anvil app might not have scopes at all, or might implement multi-tenancy completely differently. The framework doesn't care.
 
 ### Integrations
 
