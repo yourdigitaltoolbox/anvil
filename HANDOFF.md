@@ -25,7 +25,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ## Current State
 
-**Core framework complete. All layer packages done.** Twelve packages built. 129 tests passing. Example app running end-to-end.
+**Core framework complete. All layer packages done. YDTB consuming project scaffolded.** Thirteen packages built. 141 tests passing. Example app + YDTB-on-Anvil both running.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
 - Five primitives: `defineApp`, `defineTool`, `scope`, `defineClient`/`defineServer`, `defineExtension`
@@ -110,6 +110,15 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - `memoryStorage()` — Map<string, Buffer>, seed data support
 - `StorageLayer` contract: `put`, `get`, `del`, `exists`, `getUrl`
 
+### `@ydtb/anvil-layer-auth` — ✅ DONE (12 tests)
+- `betterAuth()` factory — wraps better-auth with plugin system
+- `mockAuth()` — predefined users, Bearer token auth for tests
+- `AuthLayer` contract: `getSession`, `getUser`, `handler`, `instance`
+- `authMiddleware()` — Hono middleware, populates RequestContext.userId
+- `authRoutes()` — mounts better-auth's built-in routes
+- Plugin helpers: `apiKeys()`, `twoFactor()`, `oAuth()`, `organization()`, `emailVerification()`
+- Auth is a fat layer — better-auth plugins are config, not Anvil extensions
+
 ### `@ydtb/anvil-client` — ✅ DONE (15 tests)
 - `assembleRoutes(scopeTree, tools)` — pure function: scope tree + tool surfaces → scope-grouped route structure
 - `createApiClient(toolId)` — URL + headers builder with automatic scope injection
@@ -124,6 +133,25 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - `examples/minimal/` — compose.config + layer + extension + tool + server entry
 - Demonstrates all five primitives working together
 - Runnable with `bun run examples/minimal/server.ts`, curlable endpoints
+
+### YDTB on Anvil (`~/projects/ydtb-anvil/`) — ✅ SCAFFOLDED
+Separate project consuming Anvil via `bun link`. This is where YDTB-specific extensions, tools, and config live. Anvil stays generic.
+
+Structure:
+```
+~/projects/ydtb-anvil/
+├── compose.config.ts     # Composition root — all 8 layers wired (dev variants)
+├── server/index.ts       # Server entry — boots, auth middleware, auth routes
+├── extensions/           # YDTB extensions (onboarding, search, dashboard, etc.)
+├── tools/                # YDTB tools (contacts, billing, team, etc.)
+└── package.json          # Consumes @ydtb/anvil-* via bun link
+```
+
+Currently running with dev/test layer variants (pino, memory cache, memory jobs, console email, memory storage, noop errors, mock auth). All health checks pass. Mock auth returns sessions.
+
+To link Anvil packages: from each `packages/*/` run `bun link`, then in ydtb-anvil run `bun install`.
+
+**Key decision:** YDTB-specific code does NOT live in the Anvil repo. Extensions and tools are built in ydtb-anvil, consuming Anvil as a regular dependency. This keeps the framework generic.
 
 ## Surfaces vs Hooks (Client Communication)
 
@@ -140,28 +168,25 @@ Surfaces handle **structural** communication (what a tool IS). Hooks handle **ru
 
 ## What's Next
 
-**Core framework, server v0.2, and all seven layer packages complete.** 12 packages, 129 tests, all pushed.
+**Core framework complete with all 8 layer packages.** 13 packages, 141 tests, all pushed. YDTB consuming project scaffolded.
 
-### Priority 1: Extension packages (YDTB-specific)
-Build during YDTB migration phase. These are app-level systems, not framework packages:
-- `@myapp/ext-onboarding` — setup wizard, step collection from tools
-- `@myapp/ext-search` — global search UI, query aggregation across tools
-- `@myapp/ext-dashboard` — dashboard layout, card collection from tools
-- `@myapp/ext-notifications` — notification panel, delivery engine
-- `@myapp/ext-credentials` — OAuth UI, credential vault
-- `@myapp/ext-activity` — activity feed, audit logging
+### Priority 1: Build YDTB extensions and tools (in `~/projects/ydtb-anvil/`)
+These are YDTB-specific, not framework packages. Build in the consuming project:
+- **Extensions first** — onboarding, search, dashboard, notifications, credentials, activity
+- **Then tools** — contacts, billing, team, offers, settings, etc. (migrated from YDTB patterns)
+- Each extension defines its contract via declaration merging on Anvil's surface types
+- Each tool uses `defineClient`/`defineServer` and contributes to installed extensions
 
-### Priority 2: Dev experience
+### Priority 2: Dev experience (Anvil framework)
 - Dev server (Vite for client + server process with watch)
-- Workspace alias resolver (kills 158-alias file in YDTB)
-- Getting started guide / documentation
 - `turbo run test` from root wired up
+- Getting started guide / documentation
 
-### Priority 3: Polish
-- Example app updated to use all layer packages
+### Priority 3: Polish (Anvil framework)
 - Cache helpers (SPA shell caching, loader caching middleware)
 - `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback (enables test isolation)
 - API reference documentation
+- npm publishing setup
 
 ## Key Design Decisions
 
@@ -606,7 +631,20 @@ Frameworks reviewed during Session 1, ranked by architectural similarity:
 - **`@ydtb/anvil-layer-resend`** — Resend SDK, console variant for tests. 8 tests.
 - **`@ydtb/anvil-layer-s3`** — S3Client lifecycle, memory variant for tests. 13 tests.
 
-**Session 2 totals:** 12 packages, 129 tests, ~10,000+ lines, 16 commits pushed to remote. Core framework + server v0.2 + all 7 layer packages complete.
+**Layer dependency system + auth layer:**
+- **Shared tag registry** (`getLayerTag()`) — enables inter-layer dependencies. Effect resolves boot order.
+- **`Layer.provideMerge`** in lifecycle manager — dependency graph resolution.
+- **`createLayerConfig(id, layer, opts)`** — simplified API, tag auto-derived.
+- **`@ydtb/anvil-layer-auth`** — better-auth integration with plugin system, mock variant, auth middleware. 12 tests.
+- **Duck-type Hono check** — fixes `instanceof` failure across bun link boundaries.
+- Updated all 8 layer packages to use `getLayerTag()`.
+
+**YDTB consuming project:**
+- **Scaffolded `~/projects/ydtb-anvil/`** — separate project consuming Anvil via bun link.
+- compose.config.ts with all 8 layers (dev variants). Server boots, health checks pass, mock auth works.
+- YDTB-specific extensions and tools will be built here, not in the Anvil repo.
+
+**Session 2 totals:** 13 packages, 141 tests, ~12,000+ lines, 19 commits pushed to remote. Core framework + server v0.2 + all 8 layer packages + YDTB consuming project complete.
 
 ### Session 1 (2026-04-08)
 - Reviewed Effect-TS as potential infrastructure layer — decided to use internally in server, not expose to tools
