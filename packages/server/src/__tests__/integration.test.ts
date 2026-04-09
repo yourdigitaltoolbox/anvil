@@ -16,7 +16,8 @@ import { Context, Effect, Layer } from 'effect'
 import { Hono } from 'hono'
 import { defineApp, defineServer, defineExtension, scope } from '@ydtb/anvil'
 import type { LayerConfig, HealthStatus } from '@ydtb/anvil'
-import { createServer, createWorker, getLayer, getHooks, getRequestContext, getLogger, fromOrpc } from '../index.ts'
+import { createServer, createWorker, createSpaHandler, getLayer, getHooks, getRequestContext, getLogger, fromOrpc } from '../index.ts'
+import type { RouteMatch, RegisteredRoute } from '../index.ts'
 import { provideLayerResolver, provideHookSystem, provideContributions } from '../accessors.ts'
 
 // ---------------------------------------------------------------------------
@@ -495,5 +496,178 @@ describe('anvil-worker', () => {
     expect(jobs).toHaveLength(0)
 
     await worker.shutdown()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SPA handler tests
+// ---------------------------------------------------------------------------
+
+describe('SPA handler', () => {
+  // Flat list of all registered routes with their full URL patterns
+  const routes: RegisteredRoute[] = [
+    { pattern: '/s/dashboard', toolId: 'dashboard', scopeType: 'system', route: { path: 'dashboard', component: () => null } },
+    { pattern: '/c/:scopeId/dashboard', toolId: 'dashboard', scopeType: 'company', route: { path: 'dashboard', component: () => null } },
+    { pattern: '/c/:scopeId/billing', toolId: 'billing', scopeType: 'company', route: { path: 'billing', component: () => null } },
+    { pattern: '/l/:scopeId/contacts', toolId: 'contacts', scopeType: 'location', route: { path: 'contacts', component: () => null } },
+    {
+      pattern: '/l/:scopeId/contacts/:id',
+      toolId: 'contacts',
+      scopeType: 'location',
+      route: {
+        path: 'contacts/:id',
+        component: () => null,
+        loader: async ({ params }) => ({
+          contact: { id: params.id, name: 'John' },
+        }),
+      },
+    },
+    { pattern: '/profile', toolId: 'app', scopeType: null, route: { path: 'profile', component: () => null } },
+  ]
+
+  it('matches a route and extracts params', async () => {
+    let capturedMatch: RouteMatch | null = null
+
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        capturedMatch = match
+        return '<html>shell</html>'
+      },
+    }))
+
+    await app.request('/s/dashboard')
+
+    expect(capturedMatch!.matched?.toolId).toBe('dashboard')
+    expect(capturedMatch!.matched?.scopeType).toBe('system')
+  })
+
+  it('extracts dynamic params from URL', async () => {
+    let capturedMatch: RouteMatch | null = null
+
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        capturedMatch = match
+        return '<html>shell</html>'
+      },
+    }))
+
+    await app.request('/c/co_abc123/billing')
+
+    expect(capturedMatch!.matched?.toolId).toBe('billing')
+    expect(capturedMatch!.matched?.scopeType).toBe('company')
+    expect(capturedMatch!.params.scopeId).toBe('co_abc123')
+  })
+
+  it('runs loader and provides data to renderShell', async () => {
+    let capturedMatch: RouteMatch | null = null
+
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        capturedMatch = match
+        return '<html>shell</html>'
+      },
+    }))
+
+    await app.request('/l/loc_2/contacts/ct_789')
+
+    expect(capturedMatch!.matched?.toolId).toBe('contacts')
+    expect(capturedMatch!.params.scopeId).toBe('loc_2')
+    expect(capturedMatch!.params.id).toBe('ct_789')
+    expect(capturedMatch!.loaderData).toEqual({
+      contact: { id: 'ct_789', name: 'John' },
+    })
+  })
+
+  it('returns the HTML from renderShell', async () => {
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        return `<html><title>${match.matched?.scopeType ?? 'App'}</title></html>`
+      },
+    }))
+
+    const res = await app.request('/c/co_1/billing')
+    expect(res.status).toBe(200)
+    const html = await res.text()
+    expect(html).toContain('<title>company</title>')
+  })
+
+  it('matches non-scoped routes', async () => {
+    let capturedMatch: RouteMatch | null = null
+
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        capturedMatch = match
+        return '<html>shell</html>'
+      },
+    }))
+
+    await app.request('/profile')
+
+    expect(capturedMatch!.matched?.toolId).toBe('app')
+    expect(capturedMatch!.matched?.scopeType).toBeNull()
+  })
+
+  it('handles unknown routes gracefully', async () => {
+    let capturedMatch: RouteMatch | null = null
+
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        capturedMatch = match
+        return '<html>fallback</html>'
+      },
+    }))
+
+    await app.request('/nonexistent/page')
+
+    expect(capturedMatch!.matched).toBeNull()
+    expect(capturedMatch!.loaderData).toBeUndefined()
+  })
+
+  it('skips API and asset paths', async () => {
+    let shellCalled = false
+
+    const app = new Hono()
+    app.get('/api/test', (c) => c.json({ api: true }))
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async () => {
+        shellCalled = true
+        return '<html>shell</html>'
+      },
+    }))
+
+    const apiRes = await app.request('/api/test')
+    expect(apiRes.status).toBe(200)
+    expect(shellCalled).toBe(false)
+  })
+
+  it('supports renderShell returning a Response object', async () => {
+    const app = new Hono()
+    app.get('*', createSpaHandler({
+      routes,
+      renderShell: async (match) => {
+        return new Response(`Custom: ${match.matched?.scopeType}`, {
+          headers: { 'content-type': 'text/html', 'x-custom': 'yes' },
+        })
+      },
+    }))
+
+    const res = await app.request('/s/dashboard')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('x-custom')).toBe('yes')
+    const text = await res.text()
+    expect(text).toContain('Custom: system')
   })
 })

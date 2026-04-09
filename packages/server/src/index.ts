@@ -47,6 +47,10 @@ export type { ToolEntry, ProcessedSurfaces } from './surfaces.ts'
 // Router helpers
 export { fromOrpc } from './from-orpc.ts'
 
+// SPA handler
+export { createSpaHandler } from './spa-handler.ts'
+export type { RouteMatch, SpaHandlerConfig, RegisteredRoute } from './spa-handler.ts'
+
 // Layer authoring helpers
 export { createLayerConfig } from './layer-helpers.ts'
 
