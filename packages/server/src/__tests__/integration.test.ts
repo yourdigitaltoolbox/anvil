@@ -668,6 +668,69 @@ describe('SPA handler', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Middleware priority tests
+// ---------------------------------------------------------------------------
+
+describe('middleware priorities', () => {
+  it('named middleware runs in priority order', async () => {
+    const order: string[] = []
+
+    const config = defineApp({
+      brand: { name: 'Priority Test' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({
+      config,
+      tools: [],
+      middleware: [
+        { id: 'third', handler: async (_, next) => { order.push('third'); return next() }, priority: 30 },
+        { id: 'first', handler: async (_, next) => { order.push('first'); return next() }, priority: 10 },
+        { id: 'second', handler: async (_, next) => { order.push('second'); return next() }, priority: 20 },
+      ],
+    })
+
+    server.app.get('/api/test-order', (c) => c.json({ order }))
+
+    await server.start()
+
+    await server.app.request('/api/test-order')
+    expect(order).toEqual(['first', 'second', 'third'])
+
+    await server.shutdown()
+  })
+
+  it('plain middleware runs after all prioritized middleware', async () => {
+    const order: string[] = []
+
+    const config = defineApp({
+      brand: { name: 'Mixed Test' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createServer({
+      config,
+      tools: [],
+      middleware: [
+        async (_, next) => { order.push('plain'); return next() },
+        { id: 'prioritized', handler: async (_, next) => { order.push('prioritized'); return next() }, priority: 10 },
+      ],
+    })
+
+    server.app.get('/api/test-mixed', (c) => c.json({ order }))
+
+    await server.start()
+
+    await server.app.request('/api/test-mixed')
+    expect(order).toEqual(['prioritized', 'plain'])
+
+    await server.shutdown()
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Cache helper tests
 // ---------------------------------------------------------------------------
 

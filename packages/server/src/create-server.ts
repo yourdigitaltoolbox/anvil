@@ -170,11 +170,30 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
   })
 
   // -----------------------------------------------------------------------
-  // Middleware: user-provided
+  // Middleware: user-provided (sorted by priority if named)
   // -----------------------------------------------------------------------
 
-  for (const mw of middleware) {
-    app.use('*', mw)
+  // Separate named (prioritized) from plain handlers
+  const named: Array<{ id: string; handler: MiddlewareHandler; priority: number }> = []
+  const plain: MiddlewareHandler[] = []
+
+  for (const entry of middleware) {
+    if (typeof entry === 'function') {
+      plain.push(entry)
+    } else {
+      named.push({ ...entry, priority: entry.priority ?? 100 })
+    }
+  }
+
+  // Install named middleware sorted by priority (lower = runs first)
+  named.sort((a, b) => a.priority - b.priority)
+  for (const { handler } of named) {
+    app.use('*', handler)
+  }
+
+  // Install plain middleware in array order (after all prioritized)
+  for (const handler of plain) {
+    app.use('*', handler)
   }
 
   // -----------------------------------------------------------------------

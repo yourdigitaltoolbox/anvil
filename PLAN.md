@@ -107,13 +107,13 @@ Setting up TanStack Router with scope-aware routing, auth gate, and provider hie
 - All packages run tests via single command
 - CI-ready
 
-### D2: ⬜ Middleware priority system
+### D2: ✅ Middleware priority system
 - Named middleware with priority ordering
 - `createServer({ middleware: [{ id: 'auth', handler: authMiddleware(), priority: 10 }, { id: 'scope', handler: scopeMiddleware(), priority: 20 }] })`
 - Ensures scope runs after auth without depending on array order
 - Not blocking — array order works, just fragile
 
-### D3: ⬜ `getLayer` v0.2 — AsyncLocalStorage resolution
+### D3: ✅ `getLayer` v0.2 — AsyncLocalStorage resolution
 - Check AsyncLocalStorage first, fall back to module-level
 - Enables test isolation (two servers in one process)
 - API doesn't change — internal resolution only
