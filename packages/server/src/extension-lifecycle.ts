@@ -1,27 +1,29 @@
 /**
- * Extension lifecycle — boot hooks that run after contributions are collected.
+ * Extension lifecycle — boot and shutdown hooks for extensions.
  *
- * Extensions can register a `boot` function that runs after all tool surfaces
- * are processed and contributions are collected. This is the place to:
- * - Materialize registries from collected contributions
- * - Start listeners (activity, notifications)
- * - Build derived state
+ * Two lifecycle phases:
+ *
+ * **Boot** — runs after all tool surfaces are processed and contributions
+ * are collected. Use for materializing registries, starting listeners,
+ * building derived state.
+ *
+ * **Shutdown** — runs during server shutdown, before layers are torn down.
+ * Use for cleaning up listeners, flushing buffers, releasing resources.
  *
  * @example
  * ```ts
- * import { defineExtension } from '@ydtb/anvil'
- * import { onExtensionBoot } from '@ydtb/anvil-server'
+ * import { onExtensionBoot, onExtensionShutdown } from '@ydtb/anvil-server'
  *
- * export const search = defineExtension({
- *   id: 'search',
- *   name: 'Search',
- *   server: { router: searchRouter },
+ * let unsubscribe: (() => void) | null = null
+ *
+ * onExtensionBoot('activity', async (contributions) => {
+ *   // Start listening for broadcasts
+ *   unsubscribe = hooks.onBroadcast('*', logActivity)
  * })
  *
- * // Called after all tool contributions are collected
- * onExtensionBoot('search', async (contributions) => {
- *   const providers = contributions.map(c => c.provider)
- *   searchRegistry.register(providers)
+ * onExtensionShutdown('activity', async () => {
+ *   // Clean up listener
+ *   unsubscribe?.()
  * })
  * ```
  */
@@ -34,19 +36,24 @@ export type ExtensionBootFn = (
   contributions: Array<Record<string, unknown> & { toolId: string }>
 ) => void | Promise<void>
 
+export type ExtensionShutdownFn = () => void | Promise<void>
+
 // ---------------------------------------------------------------------------
 // Registry
 // ---------------------------------------------------------------------------
 
 const bootFns = new Map<string, ExtensionBootFn[]>()
+const shutdownFns = new Map<string, ExtensionShutdownFn[]>()
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
 
 /**
  * Register a boot function for an extension.
  *
- * Called after all tool surfaces are processed and contributions collected.
- * The function receives the collected contributions for this extension.
- *
- * Can be called multiple times for the same extension — all functions run.
+ * Called after all tool surfaces are processed and contributions collected,
+ * before the server is ready to accept requests.
  */
 export function onExtensionBoot(extensionId: string, fn: ExtensionBootFn): void {
   const existing = bootFns.get(extensionId) ?? []
@@ -55,9 +62,7 @@ export function onExtensionBoot(extensionId: string, fn: ExtensionBootFn): void 
 }
 
 /**
- * Run all registered boot functions for all extensions.
- *
- * Called internally by the boot sequence after contributions are collected.
+ * Run all registered boot functions.
  * @internal
  */
 export async function runExtensionBoot(
@@ -75,10 +80,47 @@ export async function runExtensionBoot(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Shutdown
+// ---------------------------------------------------------------------------
+
 /**
- * Clear all registered boot functions. For testing.
+ * Register a shutdown function for an extension.
+ *
+ * Called during server shutdown, before layers are torn down.
+ * Use for cleaning up listeners, flushing buffers, releasing resources.
+ */
+export function onExtensionShutdown(extensionId: string, fn: ExtensionShutdownFn): void {
+  const existing = shutdownFns.get(extensionId) ?? []
+  existing.push(fn)
+  shutdownFns.set(extensionId, existing)
+}
+
+/**
+ * Run all registered shutdown functions.
  * @internal
  */
-export function clearExtensionBoot(): void {
+export async function runExtensionShutdown(): Promise<void> {
+  for (const [extId, fns] of shutdownFns) {
+    for (const fn of fns) {
+      try {
+        await fn()
+      } catch (error) {
+        console.error(`[anvil-server] Extension shutdown error (${extId}):`, error)
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Clear (testing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Clear all registered lifecycle functions. For testing.
+ * @internal
+ */
+export function clearExtensionLifecycle(): void {
   bootFns.clear()
+  shutdownFns.clear()
 }

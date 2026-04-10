@@ -20,7 +20,7 @@ import { getLogger } from './request-context.ts'
 import { provideCacheResolver } from './cache-helpers.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
-import { runExtensionBoot, clearExtensionBoot } from './extension-lifecycle.ts'
+import { runExtensionBoot, runExtensionShutdown, clearExtensionLifecycle } from './extension-lifecycle.ts'
 
 
 // ---------------------------------------------------------------------------
@@ -123,11 +123,14 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
     const shutdownLogger = getLogger()
     shutdownLogger.info({}, `Shutting down Anvil ${label}`)
 
+    // Run extension shutdown hooks before tearing down layers
+    await runExtensionShutdown()
+
     provideHookSystem(null)
     provideContributions(null)
     provideLoggingLayerResolver(null)
     provideCacheResolver(null)
-    clearExtensionBoot()
+    clearExtensionLifecycle()
 
     await lifecycle.shutdown()
 

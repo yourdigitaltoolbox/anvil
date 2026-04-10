@@ -46,8 +46,8 @@ export { createSpaHandler } from './spa-handler.ts'
 export type { RouteMatch, SpaHandlerConfig, RegisteredRoute, RouteDefinition } from './spa-handler.ts'
 
 // Extension lifecycle
-export { onExtensionBoot } from './extension-lifecycle.ts'
-export type { ExtensionBootFn } from './extension-lifecycle.ts'
+export { onExtensionBoot, onExtensionShutdown } from './extension-lifecycle.ts'
+export type { ExtensionBootFn, ExtensionShutdownFn } from './extension-lifecycle.ts'
 
 // Layer authoring helpers
 export { createLayerConfig, createLayerConfigWithTag } from './layer-helpers.ts'
