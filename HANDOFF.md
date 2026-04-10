@@ -16,23 +16,34 @@ This means:
 - **Don't optimize for YDTB's migration.** Anvil is a standalone framework. Decisions that make YDTB's migration easier but compromise the framework's design are wrong decisions.
 - **Get the foundation right.** Core types, surface contracts, and extension mechanisms must be solid before building the server on top of them. Retrofitting is what we're trying to avoid.
 
+## Key Documentation
+
+- `docs/DESIGN.md` — Full framework architecture
+- `docs/LIFECYCLE.md` — Complete lifecycle model (server 8 phases, client 6 phases, extension 6 phases)
+- `docs/PACKAGING.md` — Three-layer packaging model (framework → domain → app)
+- `docs/TOOLKIT_REFACTOR.md` — Rationale for framework/toolkit separation
+- `docs/API_REFERENCE.md` — API reference
+- `docs/GETTING_STARTED.md` — Getting started guide
+
 ## Reference Implementation
 
-YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebase for proven patterns — Anvil extracts and formalizes what YDTB built organically. Key YDTB docs:
+YDTB at `/Users/john/projects/ydtb` is the first consumer. Migration in progress — communication via `~/projects/ydtb/migration/FRAMEWORK_TEAM.md`. Key YDTB docs:
 - `docs/server-infrastructure-design.md` — Nitro replacement plan (YDTB-specific migration)
-- `docs/anvil-framework-design.md` — original framework design (being superseded by `docs/DESIGN.md` here)
 - `CLAUDE.md` — full codebase guide with conventions and architecture
 
 ## Current State
 
-**Core framework complete. All layer packages done. YDTB consuming project scaffolded.** Thirteen packages built. 141 tests passing. Example app + YDTB-on-Anvil both running.
+**Core framework complete. Toolkit layer built. All layer packages done. YDTB consuming via bun link.** Fourteen packages built (framework + toolkit + 8 layers + client + build). YDTB migration underway in `~/projects/ydtb/` with active communication channel via `~/projects/ydtb/migration/FRAMEWORK_TEAM.md`.
 
 ### `@ydtb/anvil` (core types) — ✅ DONE
-- Five primitives: `defineApp`, `defineTool`, `defineScope`, `defineClient`/`defineServer`, `defineExtension`
+- Four framework primitives: `defineApp`, `defineExtension`, layers (`LayerMap`), hooks
 - Universal extensibility: `LayerMap`, `ClientContributions`, `ServerContributions` — all empty, augmented via declaration merging
 - `LayerConfig`, `RequiredLayers` — derive from `LayerMap`, no hardcoded layer contracts
 - `ClientCore` / `ServerCore` — framework-owned surface fields, separate from extension contributions
+- `AppConfig` extensible via index signature — toolkit augments with `scopes`, `tools`, etc.
+- `Extension` type with `client`/`server` as `unknown` — toolkit narrows these
 - Zero runtime dependencies, zero Effect dependency
+- **Key separation:** `defineTool`, `defineScope`, `defineClient`, `defineServer` are toolkit concepts, NOT framework. Framework ships generic.
 
 ### `@ydtb/anvil-hooks` — ✅ DONE (27 tests)
 - `HookSystem` class — actions, broadcasts, filters
@@ -43,29 +54,60 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 
 ### `@ydtb/anvil-server` — ✅ DONE (21 tests)
 - `createServer(config)` — Hono app, middleware, health endpoints, boot sequence, shutdown
-- `createWorker(config)` — same boot, no HTTP. Collects jobs from tool surfaces.
+- `createWorker(config)` — same boot, no HTTP. Accepts pluggable `processSurfaces` callback.
 - `createSpaHandler({ routes, renderShell })` — flat route matching, loader execution, app renders HTML
-- `getLayer(key)` — synchronous layer access via Effect ManagedRuntime
+- `getLayer(key)` — synchronous layer access via Effect ManagedRuntime (v0.2: AsyncLocalStorage with module-level fallback, `withLayers()` for test isolation)
 - `getHooks()` — hook system access, module-level singleton
 - `getContributions(extensionId)` — typed accessor for extension contributions
 - `getRequestContext()` / `getLogger()` — per-request state, console fallback → LogLayer once booted
+- `onExtensionBoot(id, fn)` — post-collection boot hooks for extensions
+- `onExtensionShutdown(id, fn)` — symmetric teardown, runs BEFORE layers tear down
 - Lifecycle manager — Effect layer composition, `_effectLayer: { tag, layer }` contract, health checks, graceful shutdown
+- Shared boot sequence (`boot.ts`) — accepts pluggable `processSurfaces` callback. Runs extension boot hooks after contribution collection.
 - Surface processor — registers hooks, extracts routers, collects extension contributions
 - Route mounting — Hono sub-apps at `/api/{toolId}/*`
 - Error handling — Hono `onError` catches unhandled errors, reports to ErrorLayer, returns clean JSON
 - `fromOrpc()` — wraps oRPC handlers for framework-agnostic mounting
 - `createLayerConfig()` — enforced layer authoring helper
-- `toolEntry()` — convenience helper for manual tool wiring
-- Shared boot sequence (`boot.ts`) used by both createServer and createWorker
 - `/healthz` (liveness) + `/readyz` (layer health checks with latency)
 - `ServerConfig` accepts middleware array and app-level routes
+- Duck-type Hono check — fixes `instanceof` failure across bun link boundaries
 
 ### `@ydtb/anvil-build` — ✅ DONE (16 tests)
-- `anvilPlugin(config)` — Vite/Rollup plugin generating virtual modules
+- `anvilPlugin(config)` — Vite/Rollup plugin generating virtual modules. Extensible: accepts `modules` map from toolkits.
 - Virtual modules: `virtual:anvil/server-tools`, `virtual:anvil/client-tools`, `virtual:anvil/schema`, `virtual:anvil/scope-tree`, `virtual:anvil/permissions`, `virtual:anvil/extensions`
 - `collectTools()` / `collectToolsWithScopes()` — scope tree traversal with deduplication
+- `createDevMiddleware({ viteConfig })` — Vite middleware mode via internal Node.js http server. Embeds Vite inside Hono for single-server dev (no second port).
 - Type declarations for all virtual modules (`virtual.d.ts`)
 - Works with both Vite (client) and Rollup (server) builds
+- Upgraded to Vite 8
+
+### `@ydtb/anvil-toolkit` — ✅ DONE (NEW — Session 3)
+
+YDTB's module system built on top of the generic framework. Three entry points — no server deps leak to client.
+
+**`@ydtb/anvil-toolkit/core`** — Universal exports (no server, no React):
+- `defineTool(descriptor)` — tool identity (id, name, package)
+- `defineScope(definition)` — scope hierarchy node (type, label, urlPrefix, includes, children)
+- `defineClient(definition)` — what a tool contributes to the browser
+- `defineServer(definition)` — what a tool contributes to the server
+- `defineExtension(definition)` — app-level system with contribution contracts
+- `collectTools(scopeTree)` — scope tree traversal with deduplication
+- **Rich ScopeDefinition** — icon, defaultRoute, selfCreate, createPage, onboarding, labelPlural, server.postCreate, index signature
+- **Scope hierarchy utilities** — `getScopeHierarchy()`, `getChildTypes()`, `isRootScope()`, `isLeafScope()`, `getAncestorTypes()`, `getRootScopeType()`, `getAllScopeTypes()`, `isDescendantType()`, `getPrimaryChildType()`
+- **Chain traversal helpers** — `resolveLowestFirst()`, `resolveHighestFirst()`, `collectAcrossChain()`, `resolveWithLock()` — generic mechanics, no cascade policy
+- **Server-side chain builder** — `buildScopeChain(scopeId, resolver)` with app-provided `ScopeEntityResolver`
+
+**`@ydtb/anvil-toolkit/client`** — Core + React helpers:
+- `createAnvilApp({ scopeTree, tools, layouts, providers, layers })` — assembles routes, guard pipelines, context providers, client contributions
+- `useContributions<T>(extensionId)` hook + `ContributionProvider`
+- Routes have `layout` field matching `defineRouteLayout` id — no more publicRoutes/authenticatedRoutes/fullscreenRoutes
+
+**`@ydtb/anvil-toolkit/server`** — Server wrappers:
+- `createToolServer(config)` — wraps `createServer` with tool surface processing
+- `createToolWorker(config)` — wraps `createWorker` with auto-wiring: registers handlers, schedules crons, wires trigger-based jobs to broadcast listeners
+- `processSurfaces()` — tool-specific surface processor
+- **Tailwind auto-discovery** — `tailwindSourcesPlugin()` for Vite, `writeTailwindSources()` for build scripts. Generates `@source` directives from scope tree.
 
 ### `@ydtb/anvil-layer-pino` — ✅ DONE (7 tests)
 - `pino()` factory — JSON in production, pretty in dev
@@ -79,6 +121,8 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - Effect `acquireRelease` manages pool creation/teardown
 - Health check runs `SELECT 1` with latency measurement
 - Defines `DatabaseLayer` contract (`{ db: PostgresJsDatabase, sql: Sql }`), augments `LayerMap`
+- `drizzle-orm` is a **peerDependency** (not direct) — prevents duplicate version conflicts via bun link
+- `augment.d.ts` + `env.d.ts` import pattern for LayerMap visibility through bun link
 
 ### `@ydtb/anvil-layer-sentry` — ✅ DONE (3 tests)
 - `sentry()` factory — initializes Sentry SDK, captures with context
@@ -97,7 +141,8 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 ### `@ydtb/anvil-layer-bullmq` — ✅ DONE (10 tests)
 - `bullmq()` factory — Queue + Worker lifecycle via Effect acquireRelease
 - `memoryJobs()` — in-memory queue for dev/test, sync handler dispatch
-- `JobLayer` contract: `enqueue`, `registerHandler`, `getJob`
+- `JobLayer` contract: `enqueue`, `registerHandler`, `registerCron`, `getJob`
+- `registerCron(name, schedule, handler)` — cron scheduling support (uses BullMQ's `upsertJobScheduler()`)
 - Job status tracking (waiting, completed, failed)
 
 ### `@ydtb/anvil-layer-resend` — ✅ DONE (8 tests)
@@ -127,31 +172,38 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Read the YDTB codebas
 - `ClientLayerMap` — empty interface, augmented via declaration merging (same pattern as server)
 - `useScope()` / `ScopeProvider` — current scope context from URL params
 - `getCurrentScope()` — module-level ref for non-React access (API headers)
+- **Guards:** `defineGuard({ id, check })` — composable route access checks with cascading context. `runGuardPipeline(guards, ctx)` executes sequentially, each guard can pass, redirect, or render.
+- **Route Layouts:** `defineRouteLayout({ id, layout, guards, urlPrefix?, priority? })` — containers with guard pipelines. Replaces hardcoded route tiers (public/authenticated/fullscreen).
+- **Context Providers:** `defineContextProvider({ id, provider, priority? })` + `ContextProviderStack` — tools contribute React providers, nested by priority
 - Framework provides data + hooks, app owns the React rendering (TanStack Router setup, provider hierarchy)
 
 ### Example App — ✅ RUNNING
 - `examples/minimal/` — compose.config + layer + extension + tool + server entry
-- Demonstrates all five primitives working together
+- Demonstrates framework primitives working together
 - Runnable with `bun run examples/minimal/server.ts`, curlable endpoints
 
-### YDTB on Anvil (`~/projects/ydtb-anvil/`) — ✅ SCAFFOLDED
-Separate project consuming Anvil via `bun link`. This is where YDTB-specific extensions, tools, and config live. Anvil stays generic.
+### YDTB Migration (`~/projects/ydtb/`) — ✅ ACTIVE
+The main YDTB project is being migrated in-place to consume Anvil packages via `bun link`. A separate migration agent handles the YDTB side; communication happens via `~/projects/ydtb/migration/FRAMEWORK_TEAM.md`.
 
-Structure:
-```
-~/projects/ydtb-anvil/
-├── compose.config.ts     # Composition root — all 8 layers wired (dev variants)
-├── server/index.ts       # Server entry — boots, auth middleware, auth routes
-├── extensions/           # YDTB extensions (onboarding, search, dashboard, etc.)
-├── tools/                # YDTB tools (contacts, billing, team, etc.)
-└── package.json          # Consumes @ydtb/anvil-* via bun link
-```
+**Communication pattern:** Migration agent writes requests to FRAMEWORK_TEAM.md → Framework team responds with changes + resolution details → Migration agent pulls latest framework via `bun link`.
 
-Currently running with dev/test layer variants (pino, memory cache, memory jobs, console email, memory storage, noop errors, mock auth). All health checks pass. Mock auth returns sessions.
+**All requests resolved so far:**
+- Toolkit client layout/guard integration
+- Client extension contribution collection
+- Extension post-collection boot phase
+- Monorepo packaging mental model
+- Scope hierarchy/chain-walking conveniences
+- Scope membership layer design (decision: stays as extension, not toolkit)
+- Lifecycle model clarity and symmetric teardown
+- Richer ScopeDefinition
+- App-level module abstraction for non-tool APIs
+- Client contribution access primitive
+- Job execution plumbing gap
+- Drizzle type incompatibility with linked packages
 
-To link Anvil packages: from each `packages/*/` run `bun link`, then in ydtb-anvil run `bun install`.
+**For bun link consumers:** Create `env.d.ts` importing each layer package to make `declare module` augmentations visible. See `packages/anvil/src/layer-augments.d.ts` for details.
 
-**Key decision:** YDTB-specific code does NOT live in the Anvil repo. Extensions and tools are built in ydtb-anvil, consuming Anvil as a regular dependency. This keeps the framework generic.
+**Key decision:** YDTB-specific code does NOT live in the Anvil repo. Extensions and tools are built in YDTB, consuming Anvil as a regular dependency. This keeps the framework generic.
 
 ## Surfaces vs Hooks (Client Communication)
 
@@ -248,21 +300,31 @@ Total: ~720 TypeScript files (excluding tests and node_modules)
 
 ## What's Next (Anvil Framework)
 
-**Core framework complete with all 8 layer packages.** 13 packages, 141 tests, all pushed.
+**Core framework + toolkit + all layers complete. YDTB migration actively consuming.** 14 packages, all pushed.
 
-### Priority 1: Support ydtb-anvil migration
-Framework improvements driven by migration needs — add features to Anvil only when ydtb-anvil reveals a gap.
+### Priority 1: Support YDTB migration
+Framework improvements driven by migration needs — add features to Anvil only when the YDTB migration agent reveals a gap. Monitor `~/projects/ydtb/migration/FRAMEWORK_TEAM.md` for new requests.
 
-### Priority 2: Dev experience
-- Dev server (Vite for client + server process with watch)
+### Priority 2: Documentation
+- API reference documentation for all packages
+- Getting started guide
+- HANDOFF.md kept current as source of truth
+
+### Priority 3: Dev experience
 - `turbo run test` from root wired up
-- Getting started guide / documentation
-
-### Priority 3: Polish
-- Cache helpers (SPA shell caching, loader caching middleware)
-- `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback
-- API reference documentation
 - npm publishing setup
+- Cache helpers (SPA shell caching, loader caching middleware)
+
+### Completed since Session 2 (formerly "next"):
+- ✅ `getLayer` v0.2 — AsyncLocalStorage-based with module-level fallback, `withLayers()` for test isolation
+- ✅ Dev middleware — Vite middleware mode via internal Node.js http server (single-server dev)
+- ✅ Toolkit package — defineTool, defineScope, defineClient, defineServer, processSurfaces
+- ✅ Guards + route layouts + context providers
+- ✅ Extension lifecycle (onExtensionBoot/onExtensionShutdown)
+- ✅ Scope hierarchy utilities + chain traversal
+- ✅ Tailwind auto-discovery
+- ✅ createToolWorker auto-wiring (cron + triggers)
+- ✅ Three-layer packaging model documented
 
 ## Key Design Decisions
 
@@ -279,29 +341,32 @@ Framework improvements driven by migration needs — add features to Anvil only 
 - **SPA handler is flat route matching** — no scope-URL parsing assumptions. Routes are a flat list with full URL patterns. Framework matches URL → runs loader if present → calls app's renderShell. App owns the HTML completely. Supports Tier 1 (static shell), Tier 2 (streaming SSR), Tier 3 (per-route loaders) — app chooses, framework doesn't decide.
 - **Caching is a layer, not a framework feature** — CacheLayer provides get/set/del/has/getMany/delPattern. Framework could provide cache helpers (SPA shell caching, loader caching, API middleware) that use the CacheLayer — but caching policy is always the app's decision.
 - **Worker separation** — `createWorker()` shares boot sequence with `createServer()` via `boot.ts`. Same layers, hooks, surfaces. No HTTP.
+- **Framework vs Toolkit separation** — The framework (`@ydtb/anvil`, `@ydtb/anvil-server`, `@ydtb/anvil-client`) is generic. Tools, scopes, and the module system are YDTB's toolkit (`@ydtb/anvil-toolkit`). `defineTool`/`defineScope`/`defineClient`/`defineServer` live in the toolkit, not the framework. Another Anvil consumer would build their own toolkit with different module shapes.
+- **Guards and route layouts are framework** — `defineGuard()`, `defineRouteLayout()`, `defineContextProvider()` live in `@ydtb/anvil-client`. They're generic enough for any Anvil app. Route layouts replace hardcoded tiers (public/authenticated/fullscreen) with composable, guard-protected containers.
+- **Three-layer packaging model** — Framework/Toolkit Core (generic, any Anvil consumer) → Domain Packages (opinionated, reusable within org) → App Composition (deployment-specific wiring). See `docs/PACKAGING.md`.
+- **Extension lifecycle** — `onExtensionBoot(id, fn)` runs after all surfaces are collected. `onExtensionShutdown(id, fn)` runs BEFORE layers tear down. Symmetric, predictable.
+- **Scope hierarchy is toolkit, not framework** — Pure functions for static queries and chain traversal. No DB, no routes. App provides `ScopeEntityResolver` for server-side chain building. Toolkit owns mechanics, app owns policy.
+- **Membership stays as extension, not toolkit** — Too opinionated for toolkit core. Requires persistence, routes, business logic. YDTB's scope extension owns membership, invitations, roles.
 
 ## Concept Model
 
-Anvil has five primitives. The framework core is deliberately empty — all concrete functionality comes from packages that extend the framework through a universal declaration merging pattern.
+The framework core is deliberately empty — all concrete functionality comes from packages that extend the framework through a universal declaration merging pattern. The framework provides four primitives. Toolkits (like `@ydtb/anvil-toolkit`) add module systems on top.
 
-### 1. Composition (App + Scopes)
+### 1. Composition (App)
 
-**App** — the top-level container. One per deployment. Declares brand identity, layers, scope hierarchy, tool includes, extensions, app-level routes, and middleware. In YDTB, `apps/main`, `apps/rr`, and `apps/gym` are three different Apps using the same tools with different configurations. A whitelabel deploy is just another App.
+**App** — the top-level container. One per deployment. `AppConfig` is extensible via index signature — toolkits augment with their own fields (`scopes`, `tools`, etc.). Framework only knows about `brand`, `layers`, `extensions`, and `middleware`.
 
-**Scopes** — nested hierarchy. Each scope is a data isolation + permission + routing boundary. Scopes can have children scopes. Each scope opts into which tools are available. Scopes define their own URL prefix, creation rules, and lifecycle hooks (e.g., seed roles on creation).
+The App also owns **app-level routes** — pages that exist outside tool surfaces (`/profile`, `/onboarding`, auth pages). Passed via `routes` config on `createServer`.
 
-Example: System → Company → Location. A company scope includes billing and team tools. A location scope includes those plus contacts, offers, and notifications.
+### 2. Extensions
 
-The App also owns **app-level routes** — pages that exist outside any scope (`/profile`, `/onboarding`, auth pages, context selection). These are not tools and not scoped. They're part of the application shell.
+**App-level systems that define contracts for modules to contribute to.** Each Extension has an identity, collects contributions, and optionally has its own client/server surface.
 
-### 2. Tools
+### 3. Tools (Toolkit concept — NOT framework)
 
-The unit of business functionality. Self-contained packages that export standardized surfaces:
-- **Client surface** — core fields (routes, navigation, permissions) plus contributions to installed extensions
-- **Server surface** — core fields (router, hooks, jobs, requires) plus contributions to installed extensions
-- **Types** — action interfaces, event types, permission constants
+In YDTB's toolkit, the unit of business functionality is a **Tool** — a self-contained package that exports standardized surfaces via `defineClient()`/`defineServer()`. Tools communicate through hooks. Tools contribute to extensions.
 
-Tools don't know about each other. They communicate through hooks. Tools contribute to extensions but don't depend on them — if an extension isn't installed, the contribution is ignored.
+Another Anvil consumer would define their own module shape — "widgets", "plugins", "features" — whatever makes sense for their domain. The framework doesn't know about tools.
 
 ### 3. Layers
 
@@ -334,17 +399,13 @@ The 7 layer contracts currently in the core package (`DatabaseLayer`, `CacheLaye
 
 Cross-tool communication bus. Actions (request/response), broadcasts (fire-and-forget), filters (value transformation pipeline). The only runtime coupling between tools.
 
-### 5. Extensions
+### 4. Extensions
 
-**App-level systems that define contracts for tools to contribute to.** Extensions are the fifth primitive — they're not tools (not business features), not layers (not infrastructure), not hooks (not communication). They're platform-level systems that orchestrate cross-cutting concerns.
+**App-level systems that define contracts for modules to contribute to.** Extensions are platform-level systems that orchestrate cross-cutting concerns. Each Extension has an identity, collects contributions, and optionally has its own client/server surface.
 
-Each Extension is a package that:
-- Has an identity (id, name)
-- Defines a **contract** — what tools can contribute (client and/or server)
-- **Collects** contributions from all tools that opt in
-- Has its own **client surface** (optional — UI for orchestration, e.g., onboarding wizard, search UI)
-- Has its own **server surface** (optional — server-side processing, e.g., notification delivery engine)
-- Augments tool surface types via declaration merging — installing the extension package makes its contribution fields available on `defineClient`/`defineServer`
+Extension lifecycle:
+- `onExtensionBoot(id, fn)` — runs after all surfaces are collected (materializing registries, starting listeners)
+- `onExtensionShutdown(id, fn)` — runs BEFORE layers tear down (cleanup, unsubscribe)
 
 YDTB extensions (examples):
 
@@ -354,9 +415,7 @@ YDTB extensions (examples):
 | Search | Search provider (query function) | Global search UI, query aggregation |
 | Dashboard | Cards (component, order) | Dashboard layout, card grid |
 | Notifications | Providers (delivery config) | Notification panel, preferences, delivery engine |
-| Credentials | Provider configs (OAuth flows) | Credential management UI, OAuth routes, credential vault |
 | Activity | — (via broadcast side-channels) | Activity feed UI, activity log storage |
-| Tokens | Token providers (resolution functions) | Template token resolution engine |
 
 In code:
 
@@ -388,10 +447,13 @@ declare module '@ydtb/anvil' {
 
 ```ts
 // compose.config.ts — the app registers its extensions
+import { defineApp } from '@ydtb/anvil'
+import { defineScope } from '@ydtb/anvil-toolkit/core'
+
 export default defineApp({
   brand: { name: 'YDTB' },
   layers: { ... },
-  scopes: defineScope({ ... }),
+  scopes: defineScope({ ... }),   // toolkit augments AppConfig with `scopes`
   extensions: [onboarding, search, notifications, dashboard],
 })
 ```
@@ -423,19 +485,23 @@ The framework core ships with all three interfaces empty. Installing packages fi
 - **Different Anvil apps can have completely different extensions and layers**
 - **The framework is truly generic** — it provides primitives and plumbing, never policy
 
-### Scope System (YDTB-specific, NOT a framework concept)
+### Scope System (Toolkit concept, NOT framework)
 
-**Key architectural decision (Session 2):** Scopes are NOT a framework feature. They're a YDTB extension — an organizational system for grouping parent/child entities (system → companies → locations, or any hierarchy the app defines).
+**Key architectural decision (Sessions 2 & 3):** Scopes are a TOOLKIT feature (`@ydtb/anvil-toolkit`), not framework core. The framework doesn't know about scopes. The toolkit provides `defineScope()`, scope hierarchy utilities, and chain traversal helpers.
 
-The framework only knows that URL patterns have dynamic segments (`/c/$scopeId`). Everything else is YDTB's concern:
+**What the toolkit owns (structural mechanics):**
+- `ScopeDefinition` type with rich fields (icon, defaultRoute, selfCreate, server.postCreate, etc.)
+- Static hierarchy queries (`getScopeHierarchy`, `getChildTypes`, `isLeafScope`, etc.)
+- Chain traversal helpers (`resolveLowestFirst`, `resolveHighestFirst`, `collectAcrossChain`, `resolveWithLock`)
+- Server-side `buildScopeChain()` with app-provided `ScopeEntityResolver`
 
-- **Scope extension** — manages scope entities, membership, hierarchy, invitations, join codes. Has its own database tables, routes, and UI. This is what YDTB's better-auth scope plugin becomes — extracted from auth into its own extension.
+**What the app owns (domain behavior):**
+- **Scope extension** — manages scope entities, membership, hierarchy, invitations, join codes. Has its own database tables, routes, and UI.
 - **Scope middleware** — app-provided Hono middleware that reads `x-scope-id`, validates membership, populates `RequestContext.scopeId`.
-- **Auth layer** — stays clean. Just authentication (users, sessions, API keys). No scope concepts.
+- **Permissions** — RBAC, cascade, role templates. Part of the scope extension.
+- **Domain events** — `scope:created`, `member:joined`, etc. Dispatched by the scope extension via `getHooks().broadcast()`.
 
-In YDTB v1, scopes were crammed into the auth layer because that was the only place with database access and middleware. In ydtb-anvil, scope management is a proper extension with clean separation from auth.
-
-Another Anvil app might not have scopes at all, or might implement multi-tenancy completely differently. The framework doesn't care.
+Another Anvil app might not have scopes at all, or might implement multi-tenancy completely differently. The framework doesn't care. Even the toolkit's scope system is optional — an Anvil toolkit consumer could ignore scopes entirely.
 
 ### Integrations
 
@@ -577,19 +643,7 @@ if (ctx) {
 
 **Q: Priority cut for v0.1 of anvil-server?**
 
-**Must ship (v0.1):**
-1. Lifecycle manager (resource registry, shutdown, health)
-2. `createServer(config)` — HTTP server, tool surface processing, route mounting
-3. `getLayer(key)` — layer access from tool code
-4. Request context (AsyncLocalStorage)
-5. `getLogger()` accessor — console fallback during boot, `LogLayer` logger once layers are ready (logging is a regular layer, not a framework dependency — pino ships as `@ydtb/anvil-layer-pino`)
-
-**Fast follow (v0.2):**
-6. Scope-aware SPA handler (Tier 1 branded shell)
-7. `createWorker(config)` — separate entry point
-8. Error reporting (Sentry)
-
-Rationale: v0.1 must be able to boot, serve requests, and shut down cleanly. The SPA handler, worker mode, and Sentry are meaningful but don't block the core lifecycle loop. The scope-aware SPA handler requires the server to work first, and worker mode requires the lifecycle manager to be proven before splitting into a second entry point.
+~~All shipped.~~ v0.1 AND v0.2 both complete. Server, worker, SPA handler, error reporting, all layers, toolkit.
 
 ### Build / Dev Experience
 
@@ -642,9 +696,10 @@ The boundary is clean: Effect manages the lifecycle of infrastructure resources.
 **Q: Unresolved questions we're still mulling over?**
 
 - ~~**h3 vs Hono**~~ — **Decided: Hono.** Anvil is a standalone framework, not optimized for one consumer's migration. YDTB's direct h3 surface is small (SPA fallback, health endpoint, a few raw routes — most handlers are behind oRPC). Hono's Web Standard API, larger ecosystem, and runtime portability make it the cleaner foundation.
-- ~~**How the virtual module plugin moves**~~ — **RESOLVED (Session 2).** Built `@ydtb/anvil-build` with `anvilPlugin(config)`. Standard Rollup resolveId + load hooks. Generates 6 virtual modules. 16 tests passing. Dev server story still needs design work.
-- ~~**Client-side layer delivery**~~ — **RESOLVED (Session 2).** Built `useLayer(key)` + `LayerProvider` in `@ydtb/anvil-client`. React context with `ClientLayerMap` augmented via declaration merging. Same extensibility pattern as server layers.
-- **How tool `requires` field gets verified at compile time (Level 2)** — the virtual module plugin collects all tools' `requires` arrays. The union of all requirements must be a subset of the keys in `config.layers`. This needs type-level magic in the virtual module output. Not designed yet.
+- ~~**How the virtual module plugin moves**~~ — **RESOLVED (Session 2).** Built `@ydtb/anvil-build` with `anvilPlugin(config)`. Extensible plugin accepts `modules` map from toolkits.
+- ~~**Client-side layer delivery**~~ — **RESOLVED (Session 2).** Built `useLayer(key)` + `LayerProvider` in `@ydtb/anvil-client`.
+- ~~**Dev server story**~~ — **RESOLVED (Session 3).** `createDevMiddleware()` embeds Vite inside Hono via internal Node.js http server. Single-server dev, no second port.
+- **How tool `requires` field gets verified at compile time (Level 2)** — Not designed yet. Low priority — runtime checks catch missing layers on boot.
 
 **Q: Known gotchas in YDTB that affect extraction?**
 
@@ -735,6 +790,40 @@ Frameworks reviewed during Session 1, ranked by architectural similarity:
 - YDTB-specific extensions and tools will be built here, not in the Anvil repo.
 
 **Session 2 totals:** 13 packages, 141 tests, ~12,000+ lines, 19 commits pushed to remote. Core framework + server v0.2 + all 8 layer packages + YDTB consuming project complete.
+
+### Session 3 (2026-04-09)
+
+**Major architectural refactor: separated generic framework from YDTB-specific toolkit.**
+
+**Decisions made:**
+- **Framework vs toolkit boundary** — `defineTool`, `defineScope`, `defineClient`, `defineServer` are YDTB toolkit concepts, NOT framework primitives. The framework provides composition (`defineApp`), extensions (`defineExtension`), layers, hooks, server/client runtime. Another Anvil consumer would build their own module system.
+- **Guards and route layouts are framework** — generic enough for any Anvil app. Replace hardcoded route tiers.
+- **Membership is NOT toolkit** — too opinionated. Stays as YDTB's scope extension.
+- **Three-layer packaging model** — framework/toolkit → domain packages → app composition.
+- **Single-server dev** — Vite middleware mode (internal Node.js http server), no second port.
+- **Client route model reworked** — Routes have `layout` field matching `defineRouteLayout` id, replacing publicRoutes/authenticatedRoutes/fullscreenRoutes.
+- **`defineScope` not `scope()`** — consistent with `define*` naming convention.
+- **drizzle-orm as peer dep** — prevents duplicate version conflicts via bun link.
+
+**Work completed:**
+- **`@ydtb/anvil-toolkit`** — three entry points (core/client/server). defineTool, defineScope, defineClient, defineServer, processSurfaces, collectTools, createAnvilApp, createToolServer, createToolWorker.
+- **Guards** (`@ydtb/anvil-client`) — `defineGuard()`, `runGuardPipeline()` with cascading context.
+- **Route layouts** (`@ydtb/anvil-client`) — `defineRouteLayout()` — containers with guard pipelines, priority ordering.
+- **Context providers** (`@ydtb/anvil-client`) — `defineContextProvider()`, `ContextProviderStack`.
+- **Extension lifecycle** (`@ydtb/anvil-server`) — `onExtensionBoot()`, `onExtensionShutdown()`. Symmetric teardown.
+- **Scope hierarchy utilities** (`@ydtb/anvil-toolkit/core`) — `getScopeHierarchy()`, `getChildTypes()`, `isLeafScope()`, `getAncestorTypes()`, etc. Plus chain traversal: `resolveLowestFirst()`, `resolveHighestFirst()`, `collectAcrossChain()`, `resolveWithLock()`. Plus server-side `buildScopeChain()` with `ScopeEntityResolver`.
+- **Rich ScopeDefinition** — icon, defaultRoute, selfCreate, createPage, onboarding, labelPlural, server.postCreate, index signature.
+- **useContributions hook** — `useContributions<T>(extensionId)` + `ContributionProvider`.
+- **createToolWorker auto-wiring** — registers handlers, schedules crons via `registerCron()`, wires trigger jobs to `onBroadcast`.
+- **JobLayer contract** — added `registerCron(name, schedule, handler)`.
+- **Tailwind auto-discovery** — `tailwindSourcesPlugin()` generates `@source` directives from scope tree.
+- **Dev middleware** — `createDevMiddleware()` embeds Vite inside Hono via internal Node.js http server.
+- **Vite 8 upgrade** in build package.
+- **Framework generalization** — `AppConfig` extensible via index signature, `Extension.client`/`server` as `unknown`, boot.ts accepts pluggable `processSurfaces`.
+- **Drizzle peer dep fix** — prevents duplicate drizzle-orm versions through bun link.
+- **LayerMap augmentation guidance** — `env.d.ts` import pattern for bun link consumers.
+- **Documentation** — `LIFECYCLE.md` (server 8 phases, client 6 phases, extension 6 phases), `PACKAGING.md` (three-layer model).
+- **YDTB migration support** — 12 framework requests resolved via FRAMEWORK_TEAM.md.
 
 ### Session 1 (2026-04-08)
 - Reviewed Effect-TS as potential infrastructure layer — decided to use internally in server, not expose to tools
