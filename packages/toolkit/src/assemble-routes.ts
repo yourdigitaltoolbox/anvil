@@ -1,20 +1,19 @@
 /**
- * Route assembly — builds scope-aware route structure from tool surfaces.
+ * Route assembly — builds layout-grouped route structure from tool surfaces.
  *
- * Takes the scope tree and tool client surfaces, produces a structured
- * route map that a router (TanStack Router, React Router, etc.) can consume.
+ * Takes tool client surfaces and produces a structured route map grouped
+ * by layout ID. Routes specify their layout via the `layout` field on
+ * RouteEntry — if omitted, they default to the 'scoped' layout.
  *
- * This is a pure function with no React dependency — it produces data
- * that the framework's createApp() or a custom router setup can use.
+ * Also groups scoped routes by scope type based on the scope tree.
  *
  * @example
  * ```ts
- * import { assembleRoutes } from '@ydtb/anvil-client'
+ * import { assembleRoutes } from '@ydtb/anvil-toolkit'
  *
  * const routeMap = assembleRoutes(scopeTree, toolSurfaces)
- * // routeMap.scopes[0].routes → routes for the system scope
- * // routeMap.authenticated → app-level authenticated routes
- * // routeMap.public → public routes
+ * // routeMap.scopes — routes grouped by scope (for scoped layouts)
+ * // routeMap.layouts — all routes grouped by layout ID
  * ```
  */
 
@@ -31,13 +30,13 @@ export interface ToolClientEntry {
 }
 
 export interface ScopeRouteGroup {
-  /** Scope type (e.g., 'system', 'company', 'location') */
+  /** Scope type */
   type: string
   /** Scope label */
   label: string
-  /** URL prefix pattern (e.g., '/c/$scopeId') */
+  /** URL prefix pattern */
   urlPrefix: string
-  /** Routes from tools included in this scope */
+  /** Routes from tools included in this scope (layout=undefined or layout matching scoped) */
   routes: Array<RouteEntry & { toolId: string }>
   /** Navigation entries from tools included in this scope */
   navigation: Array<{ toolId: string; label: string; path: string; icon: unknown; position?: string; pinned?: boolean }>
@@ -48,12 +47,8 @@ export interface ScopeRouteGroup {
 export interface AssembledRoutes {
   /** Scope-grouped routes — nested like the scope tree */
   scopes: ScopeRouteGroup
-  /** Public routes (no auth required) — from all tools */
-  publicRoutes: Array<RouteEntry & { toolId: string }>
-  /** Authenticated routes (auth required, no scope) — from all tools */
-  authenticatedRoutes: Array<RouteEntry & { toolId: string }>
-  /** Fullscreen routes (no scope chrome) — from all tools */
-  fullscreenRoutes: Array<RouteEntry & { toolId: string }>
+  /** All routes grouped by layout ID */
+  layouts: Record<string, Array<RouteEntry & { toolId: string }>>
 }
 
 // ---------------------------------------------------------------------------
@@ -61,11 +56,14 @@ export interface AssembledRoutes {
 // ---------------------------------------------------------------------------
 
 /**
- * Assemble routes from tool client surfaces organized by scope.
+ * Assemble routes from tool client surfaces.
  *
- * For each scope in the tree, collects routes and navigation from tools
- * that are included in that scope. Also collects non-scoped routes
- * (public, authenticated, fullscreen) from all tools.
+ * Routes are grouped two ways:
+ * 1. By layout ID — for routing (which layout container renders this route)
+ * 2. By scope — for scope-aware routing (which tools are in which scope)
+ *
+ * Routes with no `layout` field default to no layout key (scoped routes
+ * are handled via the scope tree).
  */
 export function assembleRoutes(
   scopeTree: ScopeDefinition,
@@ -73,25 +71,21 @@ export function assembleRoutes(
 ): AssembledRoutes {
   const toolMap = new Map(tools.map((t) => [t.id, t]))
 
-  // Collect non-scoped routes from all tools
-  const publicRoutes: Array<RouteEntry & { toolId: string }> = []
-  const authenticatedRoutes: Array<RouteEntry & { toolId: string }> = []
-  const fullscreenRoutes: Array<RouteEntry & { toolId: string }> = []
+  // Group all routes by layout ID
+  const layouts: Record<string, Array<RouteEntry & { toolId: string }>> = {}
 
   for (const tool of tools) {
     const s = tool.surface
-    if (s.publicRoutes) {
-      publicRoutes.push(...s.publicRoutes.map((r) => ({ ...r, toolId: tool.id })))
-    }
-    if (s.authenticatedRoutes) {
-      authenticatedRoutes.push(...s.authenticatedRoutes.map((r) => ({ ...r, toolId: tool.id })))
-    }
-    if (s.fullscreenRoutes) {
-      fullscreenRoutes.push(...s.fullscreenRoutes.map((r) => ({ ...r, toolId: tool.id })))
+    if (s.routes) {
+      for (const route of s.routes) {
+        const layoutId = route.layout ?? 'scoped'
+        if (!layouts[layoutId]) layouts[layoutId] = []
+        layouts[layoutId].push({ ...route, toolId: tool.id })
+      }
     }
   }
 
-  // Build scope tree with routes
+  // Build scope tree with scoped routes and navigation
   function buildScopeGroup(scope: ScopeDefinition): ScopeRouteGroup {
     const routes: Array<RouteEntry & { toolId: string }> = []
     const navigation: ScopeRouteGroup['navigation'] = []
@@ -102,10 +96,12 @@ export function assembleRoutes(
 
       const s = tool.surface
       if (s.routes) {
-        // Filter routes by scope type if the route specifies scope filtering
-        const scopeRoutes = s.routes.filter(
-          (r) => !r.scope || r.scope.includes(scope.type)
-        )
+        // Collect routes that are scoped (no layout or layout='scoped')
+        const scopeRoutes = s.routes.filter((r) => {
+          const isScoped = !r.layout || r.layout === 'scoped'
+          const matchesScope = !r.scope || r.scope.includes(scope.type)
+          return isScoped && matchesScope
+        })
         routes.push(...scopeRoutes.map((r) => ({ ...r, toolId: tool.id })))
       }
       if (s.navigation) {
@@ -127,8 +123,6 @@ export function assembleRoutes(
 
   return {
     scopes: buildScopeGroup(scopeTree),
-    publicRoutes,
-    authenticatedRoutes,
-    fullscreenRoutes,
+    layouts,
   }
 }

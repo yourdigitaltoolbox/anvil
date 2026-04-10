@@ -235,19 +235,14 @@ function matchRoute(
     }
   }
 
-  // Check public routes
-  for (const route of routes.publicRoutes) {
-    if (matchPattern(path, route.path)) {
-      const Component = resolveComponent(route.component)
-      return { type: 'public', component: Component, scopeType: null, scopeId: null }
-    }
-  }
-
-  // Check authenticated routes
-  for (const route of routes.authenticatedRoutes) {
-    if (matchPattern(path, route.path)) {
-      const Component = resolveComponent(route.component)
-      return { type: 'app', component: Component, scopeType: null, scopeId: null }
+  // Check layout-grouped routes (non-scoped layouts like 'public', 'authenticated', etc.)
+  for (const [layoutId, layoutRoutes] of Object.entries(routes.layouts)) {
+    if (layoutId === 'scoped') continue // Scoped routes handled below via scope tree
+    for (const route of layoutRoutes) {
+      if (matchPattern(path, route.path)) {
+        const Component = resolveComponent(route.component)
+        return { type: 'app', component: Component, scopeType: null, scopeId: null }
+      }
     }
   }
 

@@ -3,35 +3,28 @@
  *
  * The client surface has two parts:
  *
- * 1. **Core fields** — routes, navigation, permissions. The framework knows
- *    how to process these (routing, nav shell, permission registry).
+ * 1. **Core fields** — routes, navigation, permissions. The toolkit
+ *    processes these during route assembly.
  *
  * 2. **Contributions** — extensible fields defined by Extension packages.
- *    The framework collects them and delivers them to the extension that
- *    owns them. Installing an extension package augments `ClientContributions`
- *    via declaration merging, making new fields available on `defineClient`.
+ *    Collected and delivered to the extension that owns them.
+ *
+ * Routes specify which layout they belong to via the `layout` field,
+ * matching a `defineRouteLayout({ id })` from `@ydtb/anvil-client`.
  *
  * @example
  * ```ts
- * import { defineClient } from '@ydtb/anvil'
+ * import { defineClient } from '@ydtb/anvil-toolkit/core'
  *
  * export default defineClient({
- *   // Core — framework processes these
  *   routes: [
- *     { path: 'contacts', component: () => import('./routes/contacts-page') },
+ *     { path: 'contacts', component: () => import('./pages/list'), layout: 'workspace' },
+ *     { path: 'contacts/:id', component: () => import('./pages/detail'), layout: 'workspace' },
+ *     { path: 'invite/:code', component: () => import('./pages/invite'), layout: 'public' },
  *   ],
  *   navigation: [
  *     { label: 'Contacts', path: 'contacts', icon: 'Users' },
  *   ],
- *   permissions: [
- *     { feature: 'contacts', label: 'Contacts', actions: [
- *       { key: 'contacts.view', label: 'View contacts', category: 'read' },
- *     ]},
- *   ],
- *
- *   // Contributions — defined by installed extension packages
- *   // search: { provider: contactSearch },
- *   // onboarding: { steps: [...] },
  * })
  * ```
  */
@@ -43,13 +36,19 @@ import type { ComponentType } from 'react'
 // ---------------------------------------------------------------------------
 
 export interface RouteEntry {
-  /** Route path relative to scope prefix (e.g. 'contacts', 'contacts/:id') */
+  /** Route path relative to layout prefix (e.g. 'contacts', 'contacts/:id') */
   path: string
   /** Component — lazy import for code splitting */
   component: ComponentType | (() => Promise<{ default: ComponentType }>)
+  /**
+   * Which route layout this route belongs to.
+   * Matches the `id` of a `defineRouteLayout()`.
+   * If omitted, defaults to the scoped layout (first layout with a scope guard).
+   */
+  layout?: string
   /** Scope type filter — only register for these scope types */
   scope?: string[]
-  /** Server-side loader for SSR data fetching (Tier 3 — wired up when streaming SSR is ready) */
+  /** Server-side loader for SSR data fetching */
   loader?: (context: {
     params: Record<string, string>
     scopeChain?: Array<{ scope: string; scopeId: string }>
@@ -90,45 +89,24 @@ export interface PermissionGroup {
 // Extension Contributions — augmented by Extension packages
 // ---------------------------------------------------------------------------
 
-/**
- * Client-side contributions that tools can make to installed extensions.
- * Empty by default — augmented via declaration merging by extension packages.
- *
- * @example
- * ```ts
- * // In @ydtb/ext-search
- * declare module '@ydtb/anvil' {
- *   interface ClientContributions {
- *     search?: { provider: SearchProvider }
- *   }
- * }
- * ```
- */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface ClientContributions {}
 
 // ---------------------------------------------------------------------------
-// Client Core — fields the framework knows how to process
+// Client Core
 // ---------------------------------------------------------------------------
 
 export interface ClientCore {
-  // --- Scoped features (auto-wired per including scope) ---
-
-  /** Routes rendered inside the scope layout */
+  /**
+   * Routes this tool contributes.
+   * Each route specifies which layout it belongs to via the `layout` field.
+   * Routes without a `layout` default to the scoped layout.
+   */
   routes?: RouteEntry[]
-  /** Navigation entries for the scope sidebar */
+  /** Navigation entries for scope sidebars */
   navigation?: NavigationEntry[]
   /** Permission declarations registered in the permission system */
   permissions?: PermissionGroup[]
-
-  // --- Non-scoped features (registered globally) ---
-
-  /** Routes rendered without auth (login, signup, public marketing pages) */
-  publicRoutes?: RouteEntry[]
-  /** Routes rendered fullscreen (no scope chrome) */
-  fullscreenRoutes?: RouteEntry[]
-  /** Routes rendered with auth but outside any scope (/profile, /settings) */
-  authenticatedRoutes?: RouteEntry[]
 
   // --- Escape hatch ---
 
@@ -155,9 +133,6 @@ export type Client = ClientCore & ClientContributions
 
 /**
  * Define a tool's client contribution.
- *
- * Core fields (routes, navigation, permissions) are processed by the framework.
- * Extension contribution fields are collected and delivered to their owning extension.
  */
 export function defineClient(definition: Client): Client {
   return definition

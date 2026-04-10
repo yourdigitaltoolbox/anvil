@@ -28,6 +28,7 @@ const contactsSurface: Client = {
   routes: [
     { path: 'contacts', component: DummyComponent },
     { path: 'contacts/:id', component: DummyComponent },
+    { path: 'contact-form', component: DummyComponent, layout: 'public' },
   ],
   navigation: [
     { label: 'Contacts', path: 'contacts', icon: 'Users' },
@@ -35,20 +36,15 @@ const contactsSurface: Client = {
   permissions: [
     { feature: 'contacts', label: 'Contacts', actions: [{ key: 'contacts.view', label: 'View' }] },
   ],
-  publicRoutes: [
-    { path: 'contact-form', component: DummyComponent },
-  ],
 }
 
 const billingSurface: Client = {
   routes: [
     { path: 'billing', component: DummyComponent },
+    { path: 'upgrade', component: DummyComponent, layout: 'authenticated' },
   ],
   navigation: [
     { label: 'Billing', path: 'billing', icon: 'CreditCard' },
-  ],
-  authenticatedRoutes: [
-    { path: 'upgrade', component: DummyComponent },
   ],
 }
 
@@ -132,16 +128,12 @@ describe('assembleRoutes', () => {
     expect(result.scopes.children[0].navigation).toHaveLength(2) // dashboard + billing
   })
 
-  it('collects public routes from all tools', () => {
+  it('groups routes by layout', () => {
     const result = assembleRoutes(scopeTree, tools)
-    expect(result.publicRoutes).toHaveLength(1)
-    expect(result.publicRoutes[0].path).toBe('contact-form')
-  })
-
-  it('collects authenticated routes from all tools', () => {
-    const result = assembleRoutes(scopeTree, tools)
-    expect(result.authenticatedRoutes).toHaveLength(1)
-    expect(result.authenticatedRoutes[0].path).toBe('upgrade')
+    expect(result.layouts.public).toHaveLength(1)
+    expect(result.layouts.public[0].path).toBe('contact-form')
+    expect(result.layouts.authenticated).toHaveLength(1)
+    expect(result.layouts.authenticated[0].path).toBe('upgrade')
   })
 
   it('handles empty scope tree', () => {
@@ -150,7 +142,7 @@ describe('assembleRoutes', () => {
       tools,
     )
     expect(result.scopes.routes).toHaveLength(0)
-    expect(result.publicRoutes).toHaveLength(1) // still collected from all tools
+    expect(result.layouts.public).toHaveLength(1) // still collected from all tools
   })
 })
 
