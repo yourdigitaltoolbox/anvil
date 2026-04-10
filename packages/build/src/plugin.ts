@@ -107,7 +107,15 @@ export function anvilPlugin(config: AppConfig, options: AnvilPluginOptions = {})
     load(id: string) {
       if (id.startsWith(RESOLVED_PREFIX)) {
         const virtualId = id.slice(RESOLVED_PREFIX.length)
-        return getModuleSource(virtualId)
+        const source = getModuleSource(virtualId)
+        if (source === undefined) return undefined
+
+        // CSS virtual modules need special handling
+        if (virtualId.includes('tailwind') || virtualId.endsWith('.css')) {
+          return { code: source, map: null }
+        }
+
+        return source
       }
       return undefined
     },

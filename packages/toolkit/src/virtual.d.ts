@@ -66,3 +66,9 @@ declare module 'virtual:anvil/extensions' {
 
   export const extensions: VirtualExtensionEntry[]
 }
+
+declare module 'virtual:anvil/tailwind-sources' {
+  /** CSS module — import in your stylesheet to auto-discover tool source paths */
+  const css: string
+  export default css
+}

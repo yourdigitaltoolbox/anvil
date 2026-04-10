@@ -22,12 +22,19 @@ import {
   generateScopeTreeModule,
   generatePermissionsModule,
   generateExtensionsModule,
+  generateTailwindSourcesModule,
 } from './generators.ts'
 
 /**
  * Returns the virtual module map for the Anvil build plugin.
  * These generators produce virtual modules for tool discovery,
  * schema collection, scope tree, and permissions.
+ */
+// Tailwind CSS source generation
+export { generateTailwindSources, writeTailwindSources, tailwindSourcesPlugin } from './generate-tailwind-sources.ts'
+
+/**
+ * Returns the virtual module map for the Anvil build plugin.
  */
 export function toolkitModules(_config: AppConfig): Record<string, (config: AppConfig) => string> {
   return {
@@ -37,5 +44,6 @@ export function toolkitModules(_config: AppConfig): Record<string, (config: AppC
     'virtual:anvil/scope-tree': generateScopeTreeModule,
     'virtual:anvil/permissions': generatePermissionsModule,
     'virtual:anvil/extensions': generateExtensionsModule,
+    'virtual:anvil/tailwind-sources': generateTailwindSourcesModule,
   }
 }
