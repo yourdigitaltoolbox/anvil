@@ -1,19 +1,37 @@
 /**
- * createAnvilApp — assembles a React app using route layouts, guards,
- * and context providers from the framework.
+ * createAnvilApp — assembles the Anvil context stack around your app's routing.
  *
- * @example
+ * Two usage modes:
+ *
+ * **Mode 1: Bring your own router (recommended for production apps)**
+ * Pass a `router` component (e.g., TanStack Router's `<RouterProvider>`).
+ * The framework wraps it with context providers, layer providers, and
+ * contribution collection — but the app owns routing entirely.
+ *
  * ```tsx
  * import { createAnvilApp } from '@ydtb/anvil-toolkit/client'
+ * import { RouterProvider } from '@tanstack/react-router'
  *
+ * const { App, contributions, routes } = createAnvilApp({
+ *   scopeTree,
+ *   tools,
+ *   providers: [queryProvider, authProvider, themeProvider],
+ *   router: <RouterProvider router={myRouter} />,
+ * })
+ * ```
+ *
+ * **Mode 2: Built-in simple router (for prototyping / simple apps)**
+ * Omit `router` and the framework uses its own pathname-based router
+ * with layout/guard support. Useful for demos and simple apps, but
+ * lacks TanStack Router features (nested layouts, search params,
+ * preloading, code splitting, scroll restoration).
+ *
+ * ```tsx
  * const { App } = createAnvilApp({
  *   scopeTree,
  *   tools,
- *   layouts: [workspaceLayout, publicLayout, authenticatedLayout],
- *   providers: [queryProvider, authProvider, themeProvider],
+ *   layouts: [publicLayout, authenticatedLayout],
  * })
- *
- * createRoot(document.getElementById('app')!).render(<App />)
  * ```
  */
 
@@ -43,7 +61,22 @@ export interface AnvilAppConfig {
   scopeTree: ScopeDefinition
   /** Tool client surfaces */
   tools: ToolClientEntry[]
-  /** Route layouts — define containers with guard pipelines */
+  /**
+   * External router component — the app owns routing entirely.
+   *
+   * When provided, the framework wraps this with context providers,
+   * layer providers, and contribution collection. The built-in simple
+   * router is NOT used.
+   *
+   * Typically a TanStack Router `<RouterProvider>`:
+   * ```tsx
+   * router: <RouterProvider router={myRouter} />
+   * ```
+   *
+   * Or any React element that renders your app's routes.
+   */
+  router?: ReactNode
+  /** Route layouts — define containers with guard pipelines (simple router only) */
   layouts?: RouteLayout[]
   /** Context providers — nested in priority order */
   providers?: ContextProviderEntry[]
@@ -52,7 +85,7 @@ export interface AnvilAppConfig {
   /** API base URL (default: window.location.origin) */
   apiUrl?: string
   /**
-   * App-level routes outside any layout.
+   * App-level routes outside any layout (simple router only).
    * Matched before layout routes.
    */
   appRoutes?: Array<{
@@ -68,7 +101,7 @@ export interface AnvilAppConfig {
 export interface AnvilApp {
   /** The root React component — mount this */
   App: ComponentType
-  /** The assembled route structure */
+  /** The assembled route structure (for use when building your own router) */
   routes: AssembledRoutes
   /** The scope route groups */
   scopes: ScopeRouteGroup
@@ -120,6 +153,7 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
   const {
     scopeTree,
     tools,
+    router: externalRouter,
     layouts = [],
     providers = [],
     layers = {},
@@ -141,15 +175,7 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
   // Assemble routes (grouped by layout + by scope)
   const routes = assembleRoutes(scopeTree, tools)
 
-  // Build layout map for quick lookup
-  const layoutMap = new Map<string, RouteLayout>()
-  for (const layout of layouts) {
-    layoutMap.set(layout.id, layout)
-  }
-
-  // Collect client contributions
-  const extensionIds = new Set(layouts.map(l => l.id)) // rough heuristic — improve later
-  // Actually collect from all non-core keys
+  // Collect client contributions from all non-core surface keys
   const allExtKeys = new Set<string>()
   for (const tool of tools) {
     const surface = tool.surface as Record<string, unknown>
@@ -160,18 +186,25 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
   }
   const contributions = collectClientContributions(tools, allExtKeys)
 
+  // Build layout map for quick lookup (used by simple router)
+  const layoutMap = new Map<string, RouteLayout>()
+  for (const layout of layouts) {
+    layoutMap.set(layout.id, layout)
+  }
+
   // -----------------------------------------------------------------------
   // App component
   // -----------------------------------------------------------------------
 
   function App() {
-    const router = <AppRouter />
+    // Choose routing: external router OR built-in simple router
+    const content = externalRouter ?? <SimpleRouter />
 
     if (providers.length > 0) {
       return (
         <ContextProviderStack providers={providers}>
           <LayerProvider layers={layers}>
-            {router}
+            {content}
           </LayerProvider>
         </ContextProviderStack>
       )
@@ -179,16 +212,16 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
 
     return (
       <LayerProvider layers={layers}>
-        {router}
+        {content}
       </LayerProvider>
     )
   }
 
   // -----------------------------------------------------------------------
-  // Router
+  // Simple Router (used when no external router provided)
   // -----------------------------------------------------------------------
 
-  function AppRouter() {
+  function SimpleRouter() {
     const [currentPath, setCurrentPath] = useState(
       typeof window !== 'undefined' ? window.location.pathname : '/'
     )
@@ -284,7 +317,7 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
 }
 
 // ---------------------------------------------------------------------------
-// Route matching helpers
+// Route matching helpers (used by simple router only)
 // ---------------------------------------------------------------------------
 
 interface ScopeRouteMatch {
