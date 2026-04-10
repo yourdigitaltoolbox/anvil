@@ -427,3 +427,88 @@ describe('defineRouteLayout', () => {
     expect(layout.priority).toBe(10)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Context providers
+// ---------------------------------------------------------------------------
+
+import { defineContextProvider, ContextProviderStack } from '../index.ts'
+import { render } from '@testing-library/react'
+
+describe('defineContextProvider', () => {
+  it('creates a provider entry with default priority', () => {
+    const entry = defineContextProvider({
+      id: 'test',
+      provider: ({ children }) => React.createElement('div', null, children),
+    })
+    expect(entry.id).toBe('test')
+    expect(entry.priority).toBe(100)
+  })
+
+  it('accepts custom priority', () => {
+    const entry = defineContextProvider({
+      id: 'early',
+      provider: ({ children }) => React.createElement('div', null, children),
+      priority: 10,
+    })
+    expect(entry.priority).toBe(10)
+  })
+})
+
+describe('ContextProviderStack', () => {
+  it('renders children inside nested providers', () => {
+    const log: string[] = []
+
+    const ProviderA = ({ children }: { children: React.ReactNode }) => {
+      log.push('A')
+      return React.createElement('div', { 'data-provider': 'A' }, children)
+    }
+    const ProviderB = ({ children }: { children: React.ReactNode }) => {
+      log.push('B')
+      return React.createElement('div', { 'data-provider': 'B' }, children)
+    }
+
+    const providers = [
+      defineContextProvider({ id: 'a', provider: ProviderA, priority: 10 }),
+      defineContextProvider({ id: 'b', provider: ProviderB, priority: 20 }),
+    ]
+
+    const { container } = render(
+      React.createElement(ContextProviderStack, { providers }, 'Content')
+    )
+
+    // A (priority 10) should be outermost, B (priority 20) innermost
+    expect(log).toEqual(['A', 'B'])
+    expect(container.textContent).toBe('Content')
+  })
+
+  it('sorts by priority regardless of array order', () => {
+    const log: string[] = []
+
+    const Late = ({ children }: { children: React.ReactNode }) => {
+      log.push('late')
+      return React.createElement('span', null, children)
+    }
+    const Early = ({ children }: { children: React.ReactNode }) => {
+      log.push('early')
+      return React.createElement('span', null, children)
+    }
+
+    const providers = [
+      defineContextProvider({ id: 'late', provider: Late, priority: 50 }),
+      defineContextProvider({ id: 'early', provider: Early, priority: 10 }),
+    ]
+
+    render(React.createElement(ContextProviderStack, { providers }, 'X'))
+
+    // Early renders first (outermost), Late renders second (innermost)
+    expect(log).toEqual(['early', 'late'])
+  })
+
+  it('works with empty providers', () => {
+    const { container } = render(
+      React.createElement(ContextProviderStack, { providers: [] }, 'bare')
+    )
+    expect(container.textContent).toBe('bare')
+  })
+})

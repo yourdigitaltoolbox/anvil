@@ -37,3 +37,7 @@ export type { ScopeContextValue, ScopeProviderProps } from './scope.tsx'
 // Auth (React)
 export { AuthProvider, useAuth, AuthGate } from './auth.tsx'
 export type { AuthUser, AuthContextValue, AuthProviderProps, AuthGateProps } from './auth.tsx'
+
+// Context providers (React)
+export { defineContextProvider, ContextProviderStack } from './context-providers.tsx'
+export type { ContextProviderEntry, ContextProviderStackProps } from './context-providers.tsx'
