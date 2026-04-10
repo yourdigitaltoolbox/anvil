@@ -35,3 +35,31 @@ export type { Server, ServerCore, ServerHooks } from './server.ts'
 
 // Build utilities (pure functions, no server deps)
 export { collectTools, collectToolsWithScopes } from './collect-tools.ts'
+
+// Scope hierarchy utilities
+export {
+  getScopeHierarchy,
+  getChildTypes,
+  getParentType,
+  isRootScope,
+  isLeafScope,
+  getRootScopeType,
+  getAllScopeTypes,
+  getAncestorTypes,
+  getDescendantTypes,
+  isDescendantType,
+  getPrimaryChildType,
+  getScopeTypeInfo,
+  resolveLowestFirst,
+  resolveHighestFirst,
+  collectAcrossChain,
+  resolveWithLock,
+  buildScopeChain,
+} from './scope-utils.ts'
+export type {
+  ScopeTypeInfo,
+  ScopeHierarchy,
+  ScopeChainEntry,
+  ScopeChain,
+  ScopeEntityResolver,
+} from './scope-utils.ts'
