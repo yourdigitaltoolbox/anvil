@@ -64,6 +64,12 @@ function createMemoryJobStore() {
       handlers.set(jobName, handler)
     },
 
+    registerCron: async (jobName, _schedule, handler) => {
+      // In memory: just register the handler. No actual scheduling.
+      // Tests can call enqueue() manually to trigger cron jobs.
+      handlers.set(jobName, handler)
+    },
+
     getJob: async (jobId) => {
       const job = jobs.find((j) => j.id === jobId)
       if (!job) return null

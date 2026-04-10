@@ -48,6 +48,15 @@ export interface JobLayer {
     jobName: string,
     handler: (data: unknown) => Promise<void>,
   ) => void
+  /**
+   * Register a cron job. Runs the handler on the given schedule.
+   * Schedule format: standard 5-field POSIX cron (e.g., '0 * * * *' for hourly).
+   */
+  readonly registerCron: (
+    jobName: string,
+    schedule: string,
+    handler: (data: unknown) => Promise<void>,
+  ) => Promise<void>
   /** Get a job by ID. Returns null if not found. */
   readonly getJob: (
     jobId: string,
