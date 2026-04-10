@@ -1,39 +1,38 @@
 /**
- * createAnvilApp — assembles a React app from Anvil's composition config.
- *
- * Handles the 80% case: scope-aware routing, auth gate, provider hierarchy,
- * and tool surface wiring. The app can customize via options.
+ * createAnvilApp — assembles a React app using route layouts, guards,
+ * and context providers from the framework.
  *
  * @example
  * ```tsx
- * import { createAnvilApp } from '@ydtb/anvil-client'
+ * import { createAnvilApp } from '@ydtb/anvil-toolkit/client'
  *
- * const { App, router } = createAnvilApp({
+ * const { App } = createAnvilApp({
  *   scopeTree,
- *   tools: toolClientSurfaces,
- *   auth: {
- *     loginPath: '/login',
- *     apiUrl: 'http://localhost:3001',
- *   },
- *   layers: { analytics: posthog({ apiKey: '...' }) },
- *   renderLayout: ({ children, scope }) => (
- *     <DashboardLayout scope={scope}>{children}</DashboardLayout>
- *   ),
+ *   tools,
+ *   layouts: [workspaceLayout, publicLayout, authenticatedLayout],
+ *   providers: [queryProvider, authProvider, themeProvider],
  * })
  *
- * // Mount the app
  * createRoot(document.getElementById('app')!).render(<App />)
  * ```
  */
 
 import React, { useEffect, useState, type ReactNode, type ComponentType } from 'react'
 import type { ScopeDefinition } from './scope.ts'
-import type { Client } from './client.ts'
+import type { RouteEntry } from './client.ts'
 import { assembleRoutes } from './assemble-routes.ts'
-import type { ToolClientEntry, ScopeRouteGroup } from './assemble-routes.ts'
-import { ScopeProvider, getCurrentScope } from '@ydtb/anvil-client'
-import { LayerProvider, type ClientLayerMap } from '@ydtb/anvil-client'
-import { configureApiClients } from '@ydtb/anvil-client'
+import type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemble-routes.ts'
+import {
+  ScopeProvider,
+  getCurrentScope,
+  configureApiClients,
+  LayerProvider,
+  ContextProviderStack,
+  GuardedLayout,
+  type ClientLayerMap,
+  type RouteLayout,
+  type ContextProviderEntry,
+} from '@ydtb/anvil-client'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,94 +41,95 @@ import { configureApiClients } from '@ydtb/anvil-client'
 export interface AnvilAppConfig {
   /** Scope tree from compose.config */
   scopeTree: ScopeDefinition
-  /** Tool client surfaces — from virtual:anvil/client-tools or manual wiring */
+  /** Tool client surfaces */
   tools: ToolClientEntry[]
-  /** Auth configuration */
-  auth?: {
-    /** Path to redirect to when not authenticated (default: '/login') */
-    loginPath?: string
-    /** API base URL for configuring API clients (default: window.location.origin) */
-    apiUrl?: string
-    /** Function to check if user is authenticated */
-    isAuthenticated?: () => boolean | Promise<boolean>
-  }
-  /** Client layer implementations (analytics, feature flags, etc.) */
+  /** Route layouts — define containers with guard pipelines */
+  layouts?: RouteLayout[]
+  /** Context providers — nested in priority order */
+  providers?: ContextProviderEntry[]
+  /** Client layer implementations */
   layers?: Partial<ClientLayerMap>
+  /** API base URL (default: window.location.origin) */
+  apiUrl?: string
   /**
-   * Custom layout wrapper for scope pages.
-   * Receives the current scope info and children to render.
-   */
-  renderLayout?: ComponentType<{
-    children: ReactNode
-    scopeType: string | null
-    scopeId: string | null
-  }>
-  /**
-   * App-level routes that exist outside scopes.
-   * Rendered at the top level alongside scope routes.
+   * App-level routes outside any layout.
+   * Matched before layout routes.
    */
   appRoutes?: Array<{
     path: string
     component: ComponentType
   }>
-  /**
-   * Additional React providers to wrap the app in.
-   * Applied outermost-first (first in array = outermost provider).
-   */
-  providers?: Array<ComponentType<{ children: ReactNode }>>
+  /** Component shown while loading (default: null) */
+  loadingFallback?: ReactNode
+  /** Component shown for 404 (default: "404 — Page not found") */
+  notFoundComponent?: ComponentType
 }
 
 export interface AnvilApp {
   /** The root React component — mount this */
   App: ComponentType
-  /** The assembled route structure — for custom router integration */
-  routes: ReturnType<typeof assembleRoutes>
-  /** The scope route groups — for building navigation */
+  /** The assembled route structure */
+  routes: AssembledRoutes
+  /** The scope route groups */
   scopes: ScopeRouteGroup
+  /** Client contributions collected from all tools, grouped by extension */
+  contributions: Record<string, Array<Record<string, unknown> & { toolId: string }>>
+}
+
+// ---------------------------------------------------------------------------
+// Client contribution collection
+// ---------------------------------------------------------------------------
+
+/**
+ * Collect client-side extension contributions from tool surfaces.
+ *
+ * Mirrors the server's processSurfaces contribution collection.
+ * Any field on a tool's client surface that isn't a core field
+ * (routes, navigation, permissions, setup) and matches a registered
+ * extension ID is treated as a contribution.
+ */
+function collectClientContributions(
+  tools: ToolClientEntry[],
+  extensionIds: Set<string>,
+): Record<string, Array<Record<string, unknown> & { toolId: string }>> {
+  const coreKeys = new Set(['routes', 'navigation', 'permissions', 'setup'])
+  const contributions: Record<string, Array<Record<string, unknown> & { toolId: string }>> = {}
+
+  for (const extId of extensionIds) {
+    contributions[extId] = []
+  }
+
+  for (const tool of tools) {
+    const surface = tool.surface as Record<string, unknown>
+    for (const [key, value] of Object.entries(surface)) {
+      if (coreKeys.has(key)) continue
+      if (!extensionIds.has(key)) continue
+      if (value == null) continue
+      contributions[key].push({ toolId: tool.id, ...(value as object) })
+    }
+  }
+
+  return contributions
 }
 
 // ---------------------------------------------------------------------------
 // createAnvilApp
 // ---------------------------------------------------------------------------
 
-/**
- * Create a mountable React app from Anvil's composition config.
- *
- * This handles:
- * - Route assembly from scope tree + tool surfaces
- * - API client configuration with scope header injection
- * - Provider hierarchy (layers, scope, auth, custom providers)
- * - Auth gate (redirects to login if not authenticated)
- *
- * The returned App component can be mounted directly:
- * ```tsx
- * const { App } = createAnvilApp({ ... })
- * createRoot(document.getElementById('app')!).render(<App />)
- * ```
- *
- * For custom router integration (TanStack Router, React Router),
- * use the returned `routes` and `scopes` data to build your own
- * router setup. The App component uses a simple hash-based router
- * for zero-dependency operation.
- */
 export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
   const {
     scopeTree,
     tools,
-    auth = {},
-    layers = {},
-    renderLayout: Layout,
-    appRoutes = [],
+    layouts = [],
     providers = [],
+    layers = {},
+    apiUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
+    appRoutes = [],
+    loadingFallback = null,
+    notFoundComponent: NotFound = () => React.createElement('div', null, '404 — Page not found'),
   } = config
 
-  const {
-    loginPath = '/login',
-    apiUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
-    isAuthenticated,
-  } = auth
-
-  // Configure API clients for all tools
+  // Configure API clients
   configureApiClients({
     baseUrl: apiUrl,
     getScope: () => {
@@ -138,123 +138,163 @@ export function createAnvilApp(config: AnvilAppConfig): AnvilApp {
     },
   })
 
-  // Assemble routes
+  // Assemble routes (grouped by layout + by scope)
   const routes = assembleRoutes(scopeTree, tools)
 
-  // Build the App component
-  function App() {
-    // Wrap in providers (outermost first)
-    let content: ReactNode = <AppContent />
-
-    // Layer provider
-    content = <LayerProvider layers={layers}>{content}</LayerProvider>
-
-    // Custom providers (outermost first = first in array wraps everything)
-    for (let i = providers.length - 1; i >= 0; i--) {
-      const Provider = providers[i]
-      content = <Provider>{content}</Provider>
-    }
-
-    return <>{content}</>
+  // Build layout map for quick lookup
+  const layoutMap = new Map<string, RouteLayout>()
+  for (const layout of layouts) {
+    layoutMap.set(layout.id, layout)
   }
 
-  function AppContent() {
+  // Collect client contributions
+  const extensionIds = new Set(layouts.map(l => l.id)) // rough heuristic — improve later
+  // Actually collect from all non-core keys
+  const allExtKeys = new Set<string>()
+  for (const tool of tools) {
+    const surface = tool.surface as Record<string, unknown>
+    const coreKeys = new Set(['routes', 'navigation', 'permissions', 'setup'])
+    for (const key of Object.keys(surface)) {
+      if (!coreKeys.has(key)) allExtKeys.add(key)
+    }
+  }
+  const contributions = collectClientContributions(tools, allExtKeys)
+
+  // -----------------------------------------------------------------------
+  // App component
+  // -----------------------------------------------------------------------
+
+  function App() {
+    const router = <AppRouter />
+
+    if (providers.length > 0) {
+      return (
+        <ContextProviderStack providers={providers}>
+          <LayerProvider layers={layers}>
+            {router}
+          </LayerProvider>
+        </ContextProviderStack>
+      )
+    }
+
+    return (
+      <LayerProvider layers={layers}>
+        {router}
+      </LayerProvider>
+    )
+  }
+
+  // -----------------------------------------------------------------------
+  // Router
+  // -----------------------------------------------------------------------
+
+  function AppRouter() {
     const [currentPath, setCurrentPath] = useState(
       typeof window !== 'undefined' ? window.location.pathname : '/'
     )
 
-    // Listen for navigation
     useEffect(() => {
       const handlePopState = () => setCurrentPath(window.location.pathname)
       window.addEventListener('popstate', handlePopState)
       return () => window.removeEventListener('popstate', handlePopState)
     }, [])
 
-    // Auth gate
-    const [authed, setAuthed] = useState<boolean | null>(isAuthenticated ? null : true)
-    useEffect(() => {
-      if (!isAuthenticated) return
-      Promise.resolve(isAuthenticated()).then(setAuthed)
-    }, [currentPath])
-
-    if (authed === null) return <div>Loading...</div>
-    if (authed === false && currentPath !== loginPath) {
-      if (typeof window !== 'undefined') window.location.href = loginPath
-      return null
-    }
-
-    // Match route against assembled routes
-    const match = matchRoute(currentPath, routes, appRoutes)
-
-    if (!match) {
-      return <div>404 — Page not found</div>
-    }
-
-    if (match.type === 'app') {
-      const Component = match.component
-      return <Component />
-    }
-
-    // Scope route — wrap in ScopeProvider and optional layout
-    const Wrapper = Layout ?? DefaultLayout
-
-    return (
-      <ScopeProvider scopeId={match.scopeId} scopeType={match.scopeType}>
-        <Wrapper scopeType={match.scopeType} scopeId={match.scopeId}>
-          <match.component />
-        </Wrapper>
-      </ScopeProvider>
-    )
-  }
-
-  return { App, routes, scopes: routes.scopes }
-}
-
-// ---------------------------------------------------------------------------
-// Simple route matching (framework-provided, apps can replace with TanStack Router)
-// ---------------------------------------------------------------------------
-
-interface RouteMatch {
-  type: 'scope' | 'app' | 'public'
-  component: ComponentType
-  scopeType: string | null
-  scopeId: string | null
-}
-
-function matchRoute(
-  path: string,
-  routes: ReturnType<typeof assembleRoutes>,
-  appRoutes: Array<{ path: string; component: ComponentType }>,
-): RouteMatch | null {
-  const pathParts = path.split('/').filter(Boolean)
-
-  // Check app-level routes first
-  for (const route of appRoutes) {
-    if (matchPattern(path, route.path)) {
-      return { type: 'app', component: route.component, scopeType: null, scopeId: null }
-    }
-  }
-
-  // Check layout-grouped routes (non-scoped layouts like 'public', 'authenticated', etc.)
-  for (const [layoutId, layoutRoutes] of Object.entries(routes.layouts)) {
-    if (layoutId === 'scoped') continue // Scoped routes handled below via scope tree
-    for (const route of layoutRoutes) {
-      if (matchPattern(path, route.path)) {
-        const Component = resolveComponent(route.component)
-        return { type: 'app', component: Component, scopeType: null, scopeId: null }
+    // 1. Match app-level routes (outside any layout)
+    for (const route of appRoutes) {
+      if (matchPattern(currentPath, route.path)) {
+        const Component = route.component
+        return <Component />
       }
     }
+
+    // 2. Match layout-grouped routes
+    for (const [layoutId, layoutRoutes] of Object.entries(routes.layouts)) {
+      if (layoutId === 'scoped') continue
+
+      for (const route of layoutRoutes) {
+        if (matchPattern(currentPath, route.path)) {
+          const layout = layoutMap.get(layoutId)
+          const Component = resolveComponent(route.component)
+          const params = extractParams(currentPath, route.path) ?? {}
+
+          if (layout && layout.guards.length > 0) {
+            return (
+              <GuardedLayout
+                guards={layout.guards}
+                layout={layout.layout}
+                path={currentPath}
+                params={params}
+                loadingFallback={loadingFallback}
+              >
+                <Component />
+              </GuardedLayout>
+            )
+          }
+
+          if (layout) {
+            const Layout = layout.layout
+            return <Layout><Component /></Layout>
+          }
+
+          return <Component />
+        }
+      }
+    }
+
+    // 3. Match scope routes
+    const scopeMatch = matchScopeRoute(currentPath, routes.scopes)
+    if (scopeMatch) {
+      const { route, scopeType, scopeId, params } = scopeMatch
+      const Component = resolveComponent(route.component)
+      const scopedLayout = layoutMap.get('scoped')
+
+      const inner = (
+        <ScopeProvider scopeId={scopeId} scopeType={scopeType}>
+          <Component />
+        </ScopeProvider>
+      )
+
+      if (scopedLayout && scopedLayout.guards.length > 0) {
+        return (
+          <GuardedLayout
+            guards={scopedLayout.guards}
+            layout={scopedLayout.layout}
+            path={currentPath}
+            params={params}
+            loadingFallback={loadingFallback}
+          >
+            {inner}
+          </GuardedLayout>
+        )
+      }
+
+      if (scopedLayout) {
+        const Layout = scopedLayout.layout
+        return <Layout>{inner}</Layout>
+      }
+
+      return inner
+    }
+
+    // 4. Not found
+    return <NotFound />
   }
 
-  // Check scope routes
-  const scopeMatch = matchScopeRoutes(path, routes.scopes)
-  if (scopeMatch) return scopeMatch
-
-  return null
+  return { App, routes, scopes: routes.scopes, contributions }
 }
 
-function matchScopeRoutes(path: string, scope: ScopeRouteGroup): RouteMatch | null {
-  // Try to match this scope's URL prefix
+// ---------------------------------------------------------------------------
+// Route matching helpers
+// ---------------------------------------------------------------------------
+
+interface ScopeRouteMatch {
+  route: RouteEntry & { toolId: string }
+  scopeType: string
+  scopeId: string | null
+  params: Record<string, string>
+}
+
+function matchScopeRoute(path: string, scope: ScopeRouteGroup): ScopeRouteMatch | null {
   const prefixParts = scope.urlPrefix.split('/').filter(Boolean)
   const pathParts = path.split('/').filter(Boolean)
 
@@ -275,23 +315,21 @@ function matchScopeRoutes(path: string, scope: ScopeRouteGroup): RouteMatch | nu
   if (prefixMatch) {
     const remaining = '/' + pathParts.slice(prefixParts.length).join('/')
 
-    // Try to match a route within this scope
     for (const route of scope.routes) {
-      if (matchPattern(remaining, route.path)) {
-        const Component = resolveComponent(route.component)
+      const routeParams = extractParams(remaining, route.path)
+      if (routeParams !== null) {
         return {
-          type: 'scope',
-          component: Component,
+          route,
           scopeType: scope.type,
           scopeId: params.scopeId ?? null,
+          params: { ...params, ...routeParams },
         }
       }
     }
   }
 
-  // Try children
   for (const child of scope.children) {
-    const childMatch = matchScopeRoutes(path, child)
+    const childMatch = matchScopeRoute(path, child)
     if (childMatch) return childMatch
   }
 
@@ -299,38 +337,40 @@ function matchScopeRoutes(path: string, scope: ScopeRouteGroup): RouteMatch | nu
 }
 
 function matchPattern(path: string, pattern: string): boolean {
+  return extractParams(path, pattern) !== null
+}
+
+function extractParams(path: string, pattern: string): Record<string, string> | null {
   const pathParts = path.split('/').filter(Boolean)
   const patternParts = pattern.split('/').filter(Boolean)
 
-  if (pathParts.length !== patternParts.length) return false
+  if (pathParts.length !== patternParts.length) return null
+
+  const params: Record<string, string> = {}
 
   for (let i = 0; i < patternParts.length; i++) {
-    if (patternParts[i].startsWith(':') || patternParts[i].startsWith('$')) continue
-    if (patternParts[i] !== pathParts[i]) return false
+    if (patternParts[i].startsWith(':') || patternParts[i].startsWith('$')) {
+      params[patternParts[i].replace(/^[$:]/, '')] = pathParts[i]
+    } else if (patternParts[i] !== pathParts[i]) {
+      return null
+    }
   }
 
-  return true
+  return params
 }
 
 function resolveComponent(
   component: ComponentType | (() => Promise<{ default: ComponentType }>)
 ): ComponentType {
-  // For lazy imports, return a simple wrapper
-  // In a real app with TanStack Router, this would be handled by the router
   if (typeof component === 'function' && component.length === 0) {
     try {
       const result = (component as () => unknown)()
       if (result && typeof result === 'object' && 'then' in result) {
-        // Lazy import — return a suspense-compatible wrapper
         return React.lazy(component as () => Promise<{ default: ComponentType }>)
       }
     } catch {
-      // Not a lazy import — it's a regular component
+      // Not a lazy import
     }
   }
   return component as ComponentType
-}
-
-function DefaultLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>
 }

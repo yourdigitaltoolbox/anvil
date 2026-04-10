@@ -78,7 +78,7 @@ export interface ServerContributions {}
 export interface ServerCore {
   /** Drizzle table definitions — collected and merged into the app schema */
   schema?: Record<string, unknown>
-  /** oRPC router — mounted at /api/rpc/{toolId}/* */
+  /** Hono sub-app or oRPC router (via fromOrpc()) — mounted at /api/{toolId}/* */
   router?: unknown
   /** Hook registrations — actions, broadcasts, filters */
   hooks?: ServerHooks

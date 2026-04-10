@@ -670,7 +670,7 @@ Internally, `createServer`:
 4. **Installs request context** — `AsyncLocalStorage<RequestContext>` with `requestId`, `userId`, `scopeId`, child logger
 5. **Processes extension server surfaces** — routers, hooks, jobs from each registered extension
 6. **Processes tool server surfaces** — routers, hooks, jobs, schema; collects extension contributions
-7. **Mounts HTTP routes** — tool RPC at `/api/rpc/{toolId}/*`, extension routes, app-level routes
+7. **Mounts HTTP routes** — tool routers at `/api/{toolId}/*`, extension routes, app-level routes
 8. **Mounts health checks** — `/healthz` (liveness), `/readyz` (auto-derived from layer health checks)
 9. **Boots background jobs** — cron scheduler + trigger listeners
 10. **Installs shutdown hooks** — `SIGTERM`/`SIGINT` → `ManagedRuntime.dispose()` → all resources released in reverse order
