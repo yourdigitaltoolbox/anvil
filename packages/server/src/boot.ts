@@ -20,6 +20,7 @@ import { getLogger } from './request-context.ts'
 import { provideCacheResolver } from './cache-helpers.ts'
 import { bootLifecycle } from './lifecycle.ts'
 import type { LifecycleManager } from './lifecycle.ts'
+import { runExtensionBoot, clearExtensionBoot } from './extension-lifecycle.ts'
 
 
 // ---------------------------------------------------------------------------
@@ -114,6 +115,9 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
     }
   }
 
+  // 6. Run extension boot hooks (post-collection lifecycle)
+  await runExtensionBoot(processed.contributions)
+
   // Shutdown function
   async function shutdown(): Promise<void> {
     const shutdownLogger = getLogger()
@@ -123,6 +127,7 @@ export async function boot(bootConfig: BootConfig): Promise<BootResult> {
     provideContributions(null)
     provideLoggingLayerResolver(null)
     provideCacheResolver(null)
+    clearExtensionBoot()
 
     await lifecycle.shutdown()
 

@@ -22,3 +22,7 @@ export type { AnvilAppConfig, AnvilApp } from './create-app.tsx'
 // Route assembly (requires React types)
 export { assembleRoutes } from './assemble-routes.ts'
 export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemble-routes.ts'
+
+// Client contribution access
+export { ContributionProvider, useContributions } from './use-contributions.tsx'
+export type { ContributionProviderProps } from './use-contributions.tsx'
