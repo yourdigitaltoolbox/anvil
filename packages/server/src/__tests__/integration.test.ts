@@ -334,6 +334,112 @@ describe('anvil-server integration', () => {
     await server.shutdown()
   })
 
+  it('mounts app-level routes that handle POST requests', async () => {
+    const appRouter = new Hono()
+    appRouter.post('/create', async (c) => {
+      const body = await c.req.json()
+      return c.json({ created: true, name: body.name })
+    })
+    appRouter.all('/*', async (c) => {
+      return c.json({ method: c.req.method, path: c.req.path })
+    })
+
+    const config = defineApp({
+      brand: { name: 'POST Routes Test' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createToolServer({
+      config,
+      tools: [],
+      routes: { items: appRouter },
+    })
+
+    await server.start()
+
+    // GET works
+    const getRes = await server.app.request('/api/items/anything')
+    expect(getRes.status).toBe(200)
+
+    // POST works
+    const postRes = await server.app.request('/api/items/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'test' }),
+    })
+    expect(postRes.status).toBe(200)
+    const postBody = await postRes.json()
+    expect(postBody.created).toBe(true)
+    expect(postBody.name).toBe('test')
+
+    await server.shutdown()
+  })
+
+  it('mounts auth-like catch-all route that forwards raw request', async () => {
+    // Simulates the exact authRoutes() pattern:
+    // A sub-app with all('/*') that passes c.req.raw to an external handler
+    const mockAuthHandler = async (request: Request): Promise<Response> => {
+      const url = new URL(request.url)
+      const method = request.method
+
+      // Simulate better-auth basePath stripping
+      const basePath = '/api/auth'
+      if (!url.pathname.startsWith(basePath)) {
+        return new Response(JSON.stringify({ error: 'basePath mismatch' }), { status: 404 })
+      }
+      const route = url.pathname.slice(basePath.length)
+
+      if (method === 'POST' && route === '/sign-up/email') {
+        const body = await request.json()
+        return Response.json({ userId: 'u_123', email: body.email })
+      }
+      if (method === 'GET' && route === '/session') {
+        return Response.json({ session: null })
+      }
+      return new Response(JSON.stringify({ error: 'not found' }), { status: 404 })
+    }
+
+    const authApp = new Hono()
+    authApp.all('/*', async (c) => {
+      // This is exactly what authRoutes() does
+      return mockAuthHandler(c.req.raw)
+    })
+
+    const config = defineApp({
+      brand: { name: 'Auth Pattern Test' },
+      layers: {} as any,
+      scopes: scope({ type: 'system', label: 'System', urlPrefix: '/s' }),
+    })
+
+    const server = createToolServer({
+      config,
+      tools: [],
+      routes: { auth: authApp },
+    })
+
+    await server.start()
+
+    // GET works
+    const getRes = await server.app.request('/api/auth/session')
+    expect(getRes.status).toBe(200)
+    const getBody = await getRes.json()
+    expect(getBody.session).toBeNull()
+
+    // POST works — this is the critical test
+    const postRes = await server.app.request('/api/auth/sign-up/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'test@example.com', password: 'test123456789' }),
+    })
+    expect(postRes.status).toBe(200)
+    const postBody = await postRes.json()
+    expect(postBody.userId).toBe('u_123')
+    expect(postBody.email).toBe('test@example.com')
+
+    await server.shutdown()
+  })
+
   it('fromOrpc wraps a fetch handler into a Hono app', async () => {
     // Simulate an oRPC-style fetch handler
     const mockOrpcHandler = async (req: Request): Promise<Response> => {

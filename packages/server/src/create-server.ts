@@ -45,6 +45,50 @@ import type { BootResult } from './boot.ts'
 import { getLayer } from './accessors.ts'
 
 // ---------------------------------------------------------------------------
+// Sub-app mounting (cross-Hono-version safe)
+// ---------------------------------------------------------------------------
+
+/**
+ * Mount a Hono sub-app at a path prefix.
+ *
+ * Tries Hono's native `.route()` first. If the sub-app has no routes
+ * after mounting (can happen when the sub-app is from a different Hono
+ * installation), falls back to catch-all fetch delegation.
+ *
+ * The fetch delegation approach creates catch-all routes that proxy
+ * requests to the sub-app's `.fetch()` method. This treats the sub-app
+ * as an opaque Request→Response handler, avoiding cross-version
+ * internal structure incompatibilities.
+ */
+function mountSubApp(parent: Hono, prefix: string, subApp: unknown): void {
+  const honoSubApp = subApp as Hono & { routes?: unknown[] }
+
+  // Check how many routes the parent has before mounting
+  const parentRoutesBefore = (parent as unknown as { routes?: unknown[] }).routes?.length ?? 0
+
+  // Try native route() first — works when Hono instances are compatible
+  try {
+    parent.route(prefix, honoSubApp)
+
+    // Verify routes were actually registered
+    const parentRoutesAfter = (parent as unknown as { routes?: unknown[] }).routes?.length ?? 0
+    if (parentRoutesAfter > parentRoutesBefore) {
+      return // route() worked
+    }
+  } catch {
+    // route() failed — fall through to fetch delegation
+  }
+
+  // Fallback: catch-all fetch delegation for cross-Hono compatibility
+  const fetchable = subApp as { fetch: (req: Request, ...args: unknown[]) => Response | Promise<Response> }
+  if (typeof fetchable.fetch !== 'function') return
+
+  const handler = async (c: { req: { raw: Request } }) => fetchable.fetch(c.req.raw)
+  parent.all(`${prefix}`, handler as any)
+  parent.all(`${prefix}/*`, handler as any)
+}
+
+// ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
@@ -249,7 +293,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     // Mount tool and extension routers
     for (const [id, router] of Object.entries(bootResult.processed.routers)) {
       if (isHonoApp(router)) {
-        app.route(`/api/${id}`, router)
+        mountSubApp(app, `/api/${id}`, router)
         logger.info({ id, path: `/api/${id}` }, 'Mounted router')
       } else {
         logger.warn(
@@ -262,7 +306,7 @@ export function createServer(serverConfig: ServerConfig): AnvilServer {
     // Mount app-level routes
     for (const [id, router] of Object.entries(routes)) {
       if (isHonoApp(router)) {
-        app.route(`/api/${id}`, router)
+        mountSubApp(app, `/api/${id}`, router)
         logger.info({ id, path: `/api/${id}` }, 'Mounted app-level route')
       } else {
         logger.warn(
