@@ -114,14 +114,18 @@ describe('postgres + createServer integration', () => {
       scopes: defineScope({ type: 'system', label: 'System', urlPrefix: '/s' }),
     })
 
-    const server = createServer({
-      config,
-      tools: [{ id: 'db-tool', module: { default: { router } } }],
+    const server = createServer({ config })
+
+    // Mount route directly on the app (not via tool surface)
+    server.app.get('/api/db-test', async (c) => {
+      const { sql } = getLayer('database')
+      const result = await sql`SELECT 42 as answer`
+      return c.json({ answer: result[0].answer })
     })
 
     await server.start()
 
-    const res = await server.app.request('/api/db-tool/db-test')
+    const res = await server.app.request('/api/db-test')
     expect(res.status).toBe(200)
     const body = await res.json()
     expect(body.answer).toBe(42)

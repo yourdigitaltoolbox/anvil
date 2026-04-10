@@ -14,12 +14,15 @@
   "dependencies": {
     "@ydtb/anvil": "workspace:*",
     "@ydtb/anvil-server": "workspace:*",
-    "drizzle-orm": "^0.44.0",
     "effect": "^3.14.0",
     "postgres": "^3.4.0"
   },
+  "peerDependencies": {
+    "drizzle-orm": ">=0.44.0"
+  },
   "devDependencies": {
     "@ydtb/anvil-toolkit": "workspace:*",
+    "drizzle-orm": "^0.45.0",
     "@types/node": "^25.5.2",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"
