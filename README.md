@@ -70,6 +70,9 @@ database: testPostgres({ url: process.env.TEST_DATABASE_URL! }),
 | **Composition** | `defineApp` + `defineExtension` — the application root | Brand, layers, extensions |
 | **Layers** | Swappable infrastructure behind `getLayer()` | Database, cache, email, storage, auth, logging, errors, jobs |
 | **Hooks** | Cross-module runtime communication | Actions (request/response), broadcasts (events), filters (pipelines) |
+| **Guards** | Composable route access checks via `defineGuard` | Auth, scope membership, permissions — each a pipeline step |
+| **Route Layouts** | `defineRouteLayout` — containers with guard pipelines | Workspace (auth+scope), public (no guards), portal (custom auth) |
+| **Context Providers** | `defineContextProvider` + `ContextProviderStack` — contributed React providers | Query client, theme, tool-specific state |
 | **Extensions** | App-level systems modules contribute to | Onboarding, search, dashboard, notifications |
 
 ### Toolkits
@@ -104,7 +107,7 @@ Same pattern for tool surfaces. Extensions augment `ClientContributions` and `Se
 | `@ydtb/anvil-server` | Server runtime -- `createServer`, `createWorker`, `getLayer`, `getHooks`, request context, health checks, SPA handler |
 | `@ydtb/anvil-hooks` | Hook system -- actions, broadcasts, filters, typed wrappers, side-channels |
 | `@ydtb/anvil-build` | Build system -- Vite/Rollup plugin, dev server, Vite config helper |
-| `@ydtb/anvil-client` | Client runtime -- `useLayer`, `useScope`, `useAuth`, `LayerProvider`, `AuthProvider` |
+| `@ydtb/anvil-client` | Client runtime -- `defineGuard`, `defineRouteLayout`, `defineContextProvider`, `GuardedLayout`, `ContextProviderStack`, `useLayer`, `useScope`, `useAuth` |
 
 ### Toolkits
 
@@ -195,6 +198,24 @@ await server.start()
 ```
 
 ### Client (with toolkit)
+
+Routes specify which layout they belong to via the `layout` field, matching a `defineRouteLayout` id:
+
+```ts
+// tools/contacts/client.ts
+import { defineClient } from '@ydtb/anvil-toolkit'
+
+export default defineClient({
+  routes: [
+    { path: 'contacts', component: () => import('./pages/list'), layout: 'workspace' },
+    { path: 'contacts/:id', component: () => import('./pages/detail'), layout: 'workspace' },
+    { path: 'invite/:code', component: () => import('./pages/invite'), layout: 'public' },
+  ],
+  navigation: [
+    { label: 'Contacts', path: 'contacts', icon: 'Users' },
+  ],
+})
+```
 
 ```tsx
 import { createAnvilApp } from '@ydtb/anvil-toolkit'

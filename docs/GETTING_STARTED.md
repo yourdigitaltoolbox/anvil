@@ -191,8 +191,9 @@ import { defineClient } from '@ydtb/anvil-toolkit'
 
 export default defineClient({
   routes: [
-    { path: 'contacts', component: () => import('./pages/list') },
-    { path: 'contacts/:id', component: () => import('./pages/detail') },
+    { path: 'contacts', component: () => import('./pages/list'), layout: 'workspace' },
+    { path: 'contacts/:id', component: () => import('./pages/detail'), layout: 'workspace' },
+    { path: 'invite/:code', component: () => import('./pages/invite'), layout: 'public' },
   ],
   navigation: [
     { label: 'Contacts', path: 'contacts', icon: 'Users' },
@@ -346,6 +347,119 @@ export default defineServer({
 })
 ```
 
+### 6. Guards
+
+Guards are composable steps that run before a route renders. Each guard checks one concern (auth, scope, permissions) and either passes, redirects, or renders a fallback:
+
+```ts
+import { defineGuard } from '@ydtb/anvil-client'
+
+const requireAuth = defineGuard({
+  id: 'auth',
+  check: async (ctx) => {
+    const session = await getSession()
+    if (!session) return { redirect: '/login' }
+    return { pass: true, context: { userId: session.userId } }
+  },
+})
+
+const requireScope = defineGuard({
+  id: 'scope',
+  check: async (ctx) => {
+    const scopeId = ctx.params.scopeId
+    if (!scopeId) return { redirect: '/select-context' }
+    // ctx.data.userId is available from the previous guard
+    const valid = await checkMembership(scopeId, ctx.data.userId as string)
+    if (!valid) return { redirect: '/no-access' }
+    return { pass: true, context: { scopeId } }
+  },
+})
+```
+
+Guards form a pipeline. Each guard receives accumulated context from previous guards via `ctx.data`, so an auth guard can set `userId` and a scope guard can read it.
+
+### 7. Route Layouts
+
+Route layouts group routes with a shared layout component and guard pipeline. Routes reference layouts by `id` via their `layout` field:
+
+```ts
+import { defineRouteLayout, defineGuard } from '@ydtb/anvil-client'
+
+// Scoped layout — requires auth + scope membership
+const workspace = defineRouteLayout({
+  id: 'workspace',
+  urlPrefix: '/w/$scopeId',
+  layout: WorkspaceLayout,
+  guards: [requireAuth, requireScope, requirePermissions],
+})
+
+// Public layout — no guards, anyone can access
+const publicLayout = defineRouteLayout({
+  id: 'public',
+  layout: MinimalLayout,
+  guards: [],
+})
+
+// Portal — custom auth check
+const portal = defineRouteLayout({
+  id: 'portal',
+  urlPrefix: '/portal',
+  layout: PortalLayout,
+  guards: [requirePinAuth],
+})
+```
+
+Tools reference these layouts on their routes:
+
+```ts
+defineClient({
+  routes: [
+    { path: 'contacts', component: ContactsList, layout: 'workspace' },
+    { path: 'invite/:code', component: InvitePage, layout: 'public' },
+  ],
+})
+```
+
+This replaces the old pattern of `publicRoutes`, `authenticatedRoutes`, and `fullscreenRoutes` arrays on `ClientCore`.
+
+### 8. Context Providers
+
+Tools and extensions contribute React context providers to the component tree. Providers are registered with a priority (lower = outermost):
+
+```ts
+import { defineContextProvider } from '@ydtb/anvil-client'
+
+const queryProvider = defineContextProvider({
+  id: 'query-client',
+  provider: ({ children }) => (
+    <QueryClientProvider client={queryClient}>
+      {children}
+    </QueryClientProvider>
+  ),
+  priority: 10,  // outermost
+})
+
+const themeProvider = defineContextProvider({
+  id: 'theme',
+  provider: ThemeProvider,
+  priority: 30,
+})
+```
+
+Nest all collected providers with `ContextProviderStack`:
+
+```tsx
+import { ContextProviderStack } from '@ydtb/anvil-client'
+
+function App() {
+  return (
+    <ContextProviderStack providers={[queryProvider, themeProvider, authProvider]}>
+      <Router />
+    </ContextProviderStack>
+  )
+}
+```
+
 ---
 
 ## Server Features
@@ -441,8 +555,7 @@ import { assembleRoutes } from '@ydtb/anvil-toolkit'
 
 const routeMap = assembleRoutes(scopeTree, toolClientSurfaces)
 // routeMap.scopes — nested scope groups with routes + navigation
-// routeMap.publicRoutes — no auth required
-// routeMap.authenticatedRoutes — auth required, no scope
+// Routes are grouped by their `layout` field — no more publicRoutes/authenticatedRoutes
 ```
 
 ### API Client

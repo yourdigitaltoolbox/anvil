@@ -159,9 +159,70 @@ The build package provides the plugin infrastructure. Virtual module generators 
 
 | Function | Description |
 |---|---|
+| `defineGuard(guard)` | Define a composable route guard (auth, scope, permissions, etc.) |
+| `runGuardPipeline(guards, context)` | Run a pipeline of guards sequentially; stops at the first non-pass |
+| `defineRouteLayout(layout)` | Define a route layout — container with guard pipeline and layout component |
+| `defineContextProvider(entry)` | Define a context provider contributed to the component tree |
 | `createApiClient(toolId)` | Create URL + headers builder for a tool's API |
 | `configureApiClients(config)` | Set global API client config (call once at boot) |
 | `getCurrentScope()` | Get current scope outside React (for API headers) |
+
+### Guards
+
+Guards are composable steps in a route layout's access pipeline. Each guard checks one concern and either passes (with optional context), redirects, or renders a fallback.
+
+**`Guard`**
+- `id: string` -- unique identifier
+- `check: (ctx: GuardContext) => GuardResult | Promise<GuardResult>` -- the check function
+
+**`GuardContext`** -- passed to each guard
+- `path: string` -- URL path being accessed
+- `params: Record<string, string>` -- URL parameters
+- `data: Record<string, unknown>` -- accumulated context from previous guards
+
+**`GuardResult`** -- return from `check`
+- `{ pass: true, context?: Record<string, unknown> }` -- pass, optionally adding data for downstream guards
+- `{ redirect: string }` -- redirect to a path
+- `{ render: ComponentType }` -- render a fallback component instead
+
+**`runGuardPipeline(guards, initialContext)`** -- runs guards sequentially. Returns `{ passed: true, data }` if all pass, or the first `{ redirect }` or `{ render }` result.
+
+### Route Layouts
+
+Route layouts are containers that wrap routes with a shared layout component and guard pipeline. Routes reference layouts by `id` via their `layout` field.
+
+**`RouteLayout`**
+- `id: string` -- unique identifier (referenced by `RouteEntry.layout`)
+- `urlPrefix?: string` -- URL prefix pattern (e.g. `'/w/$scopeId'`). Optional for pathless layouts.
+- `layout: ComponentType<{ children?: ReactNode }>` -- layout component wrapping child routes
+- `guards: Guard[]` -- guard pipeline; each must pass before routes render
+- `priority?: number` -- ordering (lower = earlier in router tree, default: 100)
+- `defaultRoute?: string` -- default redirect path when navigating to the layout root
+
+### `GuardedLayout` Component
+
+React component that runs a guard pipeline before rendering a route layout's children. Used internally by the routing system.
+
+**`GuardedLayoutProps`**
+- `guards: Guard[]` -- guard pipeline to run
+- `layout: ComponentType<{ children?: ReactNode }>` -- layout component
+- `path: string` -- URL path
+- `params: Record<string, string>` -- URL parameters
+- `children: ReactNode` -- route content to render if guards pass
+- `loadingFallback?: ReactNode` -- shown while guards run (default: null)
+
+### Context Providers
+
+Tools and extensions contribute React context providers to the component tree. Providers are registered with a priority (lower = outermost).
+
+**`ContextProviderEntry`**
+- `id: string` -- unique identifier
+- `provider: ComponentType<{ children: ReactNode }>` -- React component that wraps children
+- `priority?: number` -- lower = outermost (default: 100). Example: 10 = QueryClient, 20 = Auth, 30 = Theme, 50 = tool-specific, 100 = default.
+
+**`ContextProviderStack`** -- React component. Nests multiple context providers in priority order. Props:
+- `providers: ContextProviderEntry[]` -- providers to nest (sorted automatically)
+- `children: ReactNode`
 
 ### React Hooks & Components
 
@@ -174,6 +235,8 @@ The build package provides the plugin infrastructure. Virtual module generators 
 | `useAuth()` | Access auth state (user, loading, signOut) |
 | `AuthProvider` | Fetch session on mount, provide auth state |
 | `AuthGate` | Render children only if authenticated |
+| `GuardedLayout` | Run guard pipeline, render layout + children if all pass |
+| `ContextProviderStack` | Nest context providers in priority order |
 
 ### `ClientLayerMap` (extensible)
 
@@ -222,13 +285,17 @@ The toolkit package provides the YDTB tool/scope module system on top of the gen
 - `includes?: ToolDescriptor[]` -- tools available at this scope level
 - `children?: ScopeDefinition[]` -- child scope types
 
+**`RouteEntry`** -- Route definition
+- `path: string` -- route path relative to layout prefix (e.g. `'contacts'`, `'contacts/:id'`)
+- `component: ComponentType | (() => Promise<{ default: ComponentType }>)` -- lazy import for code splitting
+- `layout?: string` -- which `defineRouteLayout` id this route belongs to (defaults to the scoped layout)
+- `scope?: string[]` -- scope type filter (only register for these scope types)
+- `loader?: (context) => Promise<unknown>` -- server-side data loader for SSR
+
 **`Client`** = `ClientCore & ClientContributions` -- Full client surface type
-- `routes?: RouteEntry[]` -- scoped routes
+- `routes?: RouteEntry[]` -- routes with `layout` field specifying which route layout they belong to
 - `navigation?: NavigationEntry[]` -- sidebar entries
 - `permissions?: PermissionGroup[]` -- permission declarations
-- `publicRoutes?: RouteEntry[]` -- no auth required
-- `fullscreenRoutes?: RouteEntry[]` -- no scope chrome
-- `authenticatedRoutes?: RouteEntry[]` -- auth required, no scope
 - `setup?: (ctx) => void` -- escape hatch
 - Plus any fields from `ClientContributions` (augmented by extensions)
 
