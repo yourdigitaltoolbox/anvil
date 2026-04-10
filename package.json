@@ -10,7 +10,8 @@
     "dev": "turbo run dev",
     "build": "turbo run build",
     "test": "turbo run test",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "publish:local": "./scripts/publish-local.sh"
   },
   "devDependencies": {
     "drizzle-orm": "^0.45.2",
