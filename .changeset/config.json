@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.3/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@ydtb/anvil",
+      "@ydtb/anvil-hooks",
+      "@ydtb/anvil-server",
+      "@ydtb/anvil-client",
+      "@ydtb/anvil-build",
+      "@ydtb/anvil-toolkit",
+      "@ydtb/anvil-layer-auth",
+      "@ydtb/anvil-layer-bullmq",
+      "@ydtb/anvil-layer-pino",
+      "@ydtb/anvil-layer-postgres",
+      "@ydtb/anvil-layer-redis",
+      "@ydtb/anvil-layer-resend",
+      "@ydtb/anvil-layer-s3",
+      "@ydtb/anvil-layer-sentry"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}
