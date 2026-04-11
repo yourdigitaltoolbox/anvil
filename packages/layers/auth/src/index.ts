@@ -35,6 +35,8 @@ export interface AuthSession {
   userId: string
   sessionId: string
   expiresAt: Date
+  /** The authenticated user — returned directly from better-auth's getSession */
+  user: AuthUser
 }
 
 export interface AuthUser {
@@ -45,12 +47,14 @@ export interface AuthUser {
   emailVerified: boolean
   createdAt: Date
   updatedAt: Date
+  /** Additional fields from better-auth plugins or user.additionalFields config */
+  [key: string]: unknown
 }
 
 export interface AuthLayer {
-  /** Validate a request and return the session, or null if not authenticated */
+  /** Validate a request and return the session + user, or null if not authenticated */
   readonly getSession: (request: Request) => Promise<AuthSession | null>
-  /** Get a user by ID */
+  /** Get a user by ID via better-auth's internal adapter */
   readonly getUser: (userId: string) => Promise<AuthUser | null>
   /**
    * The better-auth handler — mount at /api/auth/* for sign-in, sign-up,
@@ -215,15 +219,36 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
           ...options,
         } as any)
 
+        // Helper to normalize a better-auth user object into AuthUser
+        function toAuthUser(u: Record<string, unknown>): AuthUser {
+          return {
+            id: u.id as string,
+            email: u.email as string,
+            name: (u.name as string) ?? undefined,
+            image: (u.image as string) ?? undefined,
+            emailVerified: !!(u.emailVerified ?? u.email_verified),
+            createdAt: new Date(u.createdAt as string ?? u.created_at as string),
+            updatedAt: new Date(u.updatedAt as string ?? u.updated_at as string),
+            // Pass through all additional fields (from plugins, additionalFields config)
+            ...Object.fromEntries(
+              Object.entries(u).filter(([k]) =>
+                !['id', 'email', 'name', 'image', 'emailVerified', 'email_verified',
+                  'createdAt', 'created_at', 'updatedAt', 'updated_at'].includes(k)
+              )
+            ),
+          }
+        }
+
         const service: AuthLayer = {
           getSession: async (request: Request) => {
             try {
               const result = await auth.api.getSession({ headers: request.headers })
-              if (!result?.session) return null
+              if (!result?.session || !result?.user) return null
               return {
                 userId: result.session.userId,
                 sessionId: result.session.id ?? result.session.token,
                 expiresAt: new Date(result.session.expiresAt),
+                user: toAuthUser(result.user as Record<string, unknown>),
               }
             } catch {
               return null
@@ -232,19 +257,14 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
 
           getUser: async (userId: string) => {
             try {
-              const api = auth.api as any
-              if (typeof api.getUser === 'function') {
-                const user = await api.getUser({ query: { id: userId } })
-                if (!user) return null
-                return {
-                  id: user.id,
-                  email: user.email,
-                  name: user.name ?? undefined,
-                  image: user.image ?? undefined,
-                  emailVerified: !!user.emailVerified,
-                  createdAt: new Date(user.createdAt),
-                  updatedAt: new Date(user.updatedAt),
-                }
+              // Use better-auth's internal adapter — the standard server-side
+              // pattern for user lookup by ID. This goes through better-auth's
+              // own database adapter layer, not a raw DB query.
+              const ctx = (auth as any).$context
+              if (ctx?.internalAdapter?.findUserById) {
+                const result = await ctx.internalAdapter.findUserById(userId)
+                if (!result?.user) return null
+                return toAuthUser(result.user as Record<string, unknown>)
               }
               return null
             } catch {
