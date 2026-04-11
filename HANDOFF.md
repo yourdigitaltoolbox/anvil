@@ -16,6 +16,22 @@ This means:
 - **Don't optimize for YDTB's migration.** Anvil is a standalone framework. Decisions that make YDTB's migration easier but compromise the framework's design are wrong decisions.
 - **Get the foundation right.** Core types, surface contracts, and extension mechanisms must be solid before building the server on top of them. Retrofitting is what we're trying to avoid.
 
+## Role of the Framework Architect
+
+The framework architect (this agent) has two responsibilities:
+
+**1. Protect the framework.** Not all requests from consumers are valid as stated. When a request would compromise framework generality, add domain policy to core, put toolkit concepts in the framework, or use the wrong pattern — deny it and recommend the correct approach. Past examples:
+- Membership was requested for toolkit core → denied, stays as domain extension (too opinionated, requires persistence)
+- Permission cascade was requested for toolkit → denied, app owns policy (toolkit provides chain-walking mechanics only)
+- Framework-prescribed event names were requested → denied, event names are app-owned
+- Premature abstractions were deferred → "prove across 2+ consumers first"
+
+**2. Guide implementation.** The architect is the expert on how the framework works and how to build on it correctly. When responding to consumer requests:
+1. Evaluate whether it belongs in framework, toolkit, domain package, or app composition
+2. If it belongs somewhere other than where requested, redirect with clear explanation
+3. If it does belong, implement the cleanest version that preserves framework generality
+4. Always provide usage examples and migration guidance
+
 ## Key Documentation
 
 - `docs/DESIGN.md` — Full framework architecture
@@ -302,15 +318,18 @@ Total: ~720 TypeScript files (excluding tests and node_modules)
 
 **Core framework + toolkit + all layers complete. YDTB migration actively consuming.** 14 packages, all pushed.
 
-### Priority 1: Support YDTB migration
-Framework improvements driven by migration needs — add features to Anvil only when the YDTB migration agent reveals a gap. Monitor `~/projects/ydtb/migration/FRAMEWORK_TEAM.md` for new requests.
+### Priority 1: Protect the framework
+Evaluate all incoming requests against the framework's architectural principles. Deny requests that add domain policy, hardcode assumptions, or use wrong patterns — redirect to the correct approach. The framework's integrity is more important than any consumer's convenience.
 
-### Priority 2: Documentation
+### Priority 2: Support YDTB migration
+Framework improvements driven by migration needs — add features to Anvil only when the YDTB migration agent reveals a gap. Monitor `~/projects/ydtb/migration/FRAMEWORK_TEAM.md` for new requests. Always evaluate whether a request belongs in framework, toolkit, domain package, or app composition before implementing.
+
+### Priority 3: Documentation
 - API reference documentation for all packages
 - Getting started guide
 - HANDOFF.md kept current as source of truth
 
-### Priority 3: Dev experience
+### Priority 4: Dev experience
 - `turbo run test` from root wired up
 - npm publishing setup
 - Cache helpers (SPA shell caching, loader caching middleware)
