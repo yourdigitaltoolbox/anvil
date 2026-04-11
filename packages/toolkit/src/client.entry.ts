@@ -39,3 +39,13 @@ export {
   scopeHasUrlScopeId,
   isSingletonScope,
 } from './scope-client.tsx'
+
+// Layout portals — pre-named slots for scoped dashboard layouts
+export {
+  HeaderPortal,
+  SidebarPortal,
+  HEADER_SLOT,
+  SIDEBAR_SLOT,
+  SIDEBAR_DRAWER_SLOT,
+} from './layout-portals.tsx'
+export type { HeaderPortalProps, SidebarPortalProps } from './layout-portals.tsx'

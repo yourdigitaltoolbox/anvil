@@ -42,6 +42,6 @@ export type { AuthUser, AuthContextValue, AuthProviderProps, AuthGateProps } fro
 export { defineContextProvider, ContextProviderStack } from './context-providers.tsx'
 export type { ContextProviderEntry, ContextProviderStackProps } from './context-providers.tsx'
 
-// Layout portals (React) — tools inject into shell header/sidebar
-export { PortalProvider, useLayoutPortals, HeaderPortal, SidebarPortal } from './portals.tsx'
-export type { PortalContextValue, PortalProviderProps, HeaderPortalProps, SidebarPortalProps } from './portals.tsx'
+// Layout portals (React) — generic named slot system for content injection
+export { PortalProvider, PortalSlot, Portal, usePortalHasContent, usePortalMeta } from './portals.tsx'
+export type { PortalProviderProps, PortalSlotProps, PortalProps } from './portals.tsx'
