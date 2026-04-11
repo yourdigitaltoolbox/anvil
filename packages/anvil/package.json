@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Anvil — composable full-stack plugin framework",
   "type": "module",
   "exports": {

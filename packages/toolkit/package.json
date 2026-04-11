@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-toolkit",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "YDTB toolkit for Anvil — tools, scopes, and surface definitions",
   "type": "module",
   "exports": {

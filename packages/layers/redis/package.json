@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-redis",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "Redis cache layer for Anvil — key-value caching with TTL",
   "type": "module",
   "exports": {
