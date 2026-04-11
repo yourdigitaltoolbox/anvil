@@ -117,7 +117,10 @@ export type Server = ServerCore & ServerContributions
  *
  * Core fields (schema, router, hooks, jobs, requires) are processed by the framework.
  * Extension contribution fields are collected and delivered to their owning extension.
+ *
+ * Accepts unknown keys beyond the core and contribution types — these are treated
+ * as extension contributions collected at boot time.
  */
-export function defineServer(definition: Server): Server {
+export function defineServer(definition: Server & Record<string, unknown>): Server {
   return definition
 }

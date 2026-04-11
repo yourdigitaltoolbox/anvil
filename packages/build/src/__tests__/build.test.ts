@@ -9,20 +9,17 @@
 
 import { describe, it, expect } from 'vitest'
 import { defineApp, defineExtension } from '@ydtb/anvil'
+import { defineTool, scope, collectTools, collectToolsWithScopes } from '@ydtb/anvil-toolkit/core'
 import {
-  defineTool,
-  scope,
-  collectTools,
-  collectToolsWithScopes,
+  toolkitModules,
   generateServerToolsModule,
   generateClientToolsModule,
   generateSchemaModule,
   generateScopeTreeModule,
   generatePermissionsModule,
   generateExtensionsModule,
-} from '@ydtb/anvil-toolkit'
+} from '@ydtb/anvil-toolkit/build'
 import { anvilPlugin } from '../plugin.ts'
-import { toolkitModules } from '@ydtb/anvil-toolkit/build'
 
 // ---------------------------------------------------------------------------
 // Test fixtures

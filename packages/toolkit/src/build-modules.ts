@@ -25,6 +25,16 @@ import {
   generateTailwindSourcesModule,
 } from './generators.ts'
 
+// Re-export generators for direct use (e.g., in tests)
+export {
+  generateServerToolsModule,
+  generateClientToolsModule,
+  generateSchemaModule,
+  generateScopeTreeModule,
+  generatePermissionsModule,
+  generateExtensionsModule,
+} from './generators.ts'
+
 /**
  * Returns the virtual module map for the Anvil build plugin.
  * These generators produce virtual modules for tool discovery,

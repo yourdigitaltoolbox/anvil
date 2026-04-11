@@ -14,7 +14,7 @@ export { anvilPlugin } from './plugin.ts'
 export type { AnvilPluginOptions, VirtualModuleGenerator } from './plugin.ts'
 
 export { createDevMiddleware } from './dev-middleware.ts'
-export type { DevMiddlewareConfig } from './dev-middleware.ts'
+export type { DevMiddlewareConfig, DevMiddleware } from './dev-middleware.ts'
 
 export { createViteConfig } from './vite-config.ts'
 export type { ViteConfigOptions } from './vite-config.ts'

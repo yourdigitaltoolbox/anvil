@@ -50,7 +50,8 @@ export function fromOrpc(router: unknown): Hono {
     if (!initPromise) {
       initPromise = (async () => {
         try {
-          const mod = await import('@orpc/server/fetch')
+          const specifier = '@orpc/server/fetch'
+          const mod = await import(/* @vite-ignore */ specifier)
           rpcHandler = new mod.RPCHandler(router as any)
         } catch {
           initFailed = true

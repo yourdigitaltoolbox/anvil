@@ -77,7 +77,7 @@ YDTB at `/Users/john/projects/ydtb` is the first consumer. Migration in progress
 - `anvilPlugin(config)` — Vite/Rollup plugin generating virtual modules. Extensible: accepts `modules` map from toolkits.
 - Virtual modules: `virtual:anvil/server-tools`, `virtual:anvil/client-tools`, `virtual:anvil/schema`, `virtual:anvil/scope-tree`, `virtual:anvil/permissions`, `virtual:anvil/extensions`
 - `collectTools()` / `collectToolsWithScopes()` — scope tree traversal with deduplication
-- `createDevMiddleware({ viteConfig })` — Vite middleware mode via internal Node.js http server. Embeds Vite inside Hono for single-server dev (no second port).
+- `createDevMiddleware({ viteConfig })` — Vite middleware mode via internal Node.js http server. Embeds Vite inside Hono for single-server dev (no second port). Returns `DevMiddleware` (extends `MiddlewareHandler`) with `handleUpgrade` + `websocket` handlers for Bun.serve WebSocket proxying — enables Vite HMR behind reverse proxies.
 - Type declarations for all virtual modules (`virtual.d.ts`)
 - Works with both Vite (client) and Rollup (server) builds
 - Upgraded to Vite 8

@@ -133,7 +133,10 @@ export type Client = ClientCore & ClientContributions
 
 /**
  * Define a tool's client contribution.
+ *
+ * Accepts unknown keys beyond the core and contribution types — these are treated
+ * as extension contributions collected at boot time.
  */
-export function defineClient(definition: Client): Client {
+export function defineClient(definition: Client & Record<string, unknown>): Client {
   return definition
 }
