@@ -37,6 +37,27 @@ export interface AuthSession {
   expiresAt: Date
   /** The authenticated user — returned directly from better-auth's getSession */
   user: AuthUser
+  /**
+   * Additional session fields configured via better-auth's `session.fields`.
+   *
+   * Apps can extend the session with custom data that persists across requests:
+   * ```ts
+   * betterAuth({
+   *   options: {
+   *     session: {
+   *       fields: {
+   *         scopeId: { type: 'string', required: false },
+   *         scopeType: { type: 'string', required: false },
+   *       },
+   *     },
+   *   },
+   * })
+   * ```
+   *
+   * These fields are stored in the session table and returned on every
+   * `getSession()` call. Access via `session.scopeId`, `session.scopeType`, etc.
+   */
+  [key: string]: unknown
 }
 
 export interface AuthUser {
@@ -54,6 +75,20 @@ export interface AuthUser {
 export interface AuthLayer {
   /** Validate a request and return the session + user, or null if not authenticated */
   readonly getSession: (request: Request) => Promise<AuthSession | null>
+  /**
+   * Update custom fields on the current session.
+   *
+   * Uses better-auth's session update API. Fields must be declared in
+   * the `session.fields` config. Only updates the fields you pass —
+   * other session fields are preserved.
+   *
+   * @example
+   * ```ts
+   * const auth = getLayer('auth')
+   * await auth.updateSession(request, { scopeId: 'co_123', scopeType: 'company' })
+   * ```
+   */
+  readonly updateSession: (request: Request, fields: Record<string, unknown>) => Promise<boolean>
   /** Get a user by ID via better-auth's internal adapter */
   readonly getUser: (userId: string) => Promise<AuthUser | null>
   /**
@@ -244,14 +279,48 @@ export function betterAuth(config: BetterAuthConfig): LayerConfig<'auth'> {
             try {
               const result = await auth.api.getSession({ headers: request.headers })
               if (!result?.session || !result?.user) return null
+              const s = result.session as Record<string, unknown>
               return {
-                userId: result.session.userId,
-                sessionId: result.session.id ?? result.session.token,
-                expiresAt: new Date(result.session.expiresAt),
+                // Core session fields
+                userId: s.userId as string,
+                sessionId: (s.id ?? s.token) as string,
+                expiresAt: new Date(s.expiresAt as string),
                 user: toAuthUser(result.user as Record<string, unknown>),
+                // Pass through all additional session fields (from session.fields config)
+                ...Object.fromEntries(
+                  Object.entries(s).filter(([k]) =>
+                    !['id', 'token', 'userId', 'expiresAt', 'createdAt', 'updatedAt',
+                      'ipAddress', 'userAgent'].includes(k)
+                  )
+                ),
               }
             } catch {
               return null
+            }
+          },
+
+          updateSession: async (request: Request, fields: Record<string, unknown>) => {
+            try {
+              const api = auth.api as any
+              if (typeof api.updateSession === 'function') {
+                await api.updateSession({
+                  headers: request.headers,
+                  body: fields,
+                })
+                return true
+              }
+              // Fallback: use internal adapter
+              const ctx = (auth as any).$context
+              if (ctx?.internalAdapter?.updateSession) {
+                const session = await auth.api.getSession({ headers: request.headers })
+                if (!session?.session) return false
+                const sessionToken = (session.session as Record<string, unknown>).token ?? (session.session as Record<string, unknown>).id
+                await ctx.internalAdapter.updateSession(sessionToken, fields)
+                return true
+              }
+              return false
+            } catch {
+              return false
             }
           },
 
