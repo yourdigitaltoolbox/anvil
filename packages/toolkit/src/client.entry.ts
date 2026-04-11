@@ -26,3 +26,16 @@ export type { ToolClientEntry, ScopeRouteGroup, AssembledRoutes } from './assemb
 // Client contribution access
 export { ContributionProvider, useContributions } from './use-contributions.tsx'
 export type { ContributionProviderProps } from './use-contributions.tsx'
+
+// Scope client utilities (React hooks + pure functions for tool packages)
+export {
+  initScopeClient,
+  useScopeLink,
+  useScopeLabel,
+  useChildScopeLabel,
+  scopeLink,
+  detectScopeFromPath,
+  getUrlPrefixes,
+  scopeHasUrlScopeId,
+  isSingletonScope,
+} from './scope-client.tsx'
