@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-resend",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Resend email layer for Anvil — transactional email sending via the Resend API",
   "type": "module",
   "exports": {

@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-auth",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Authentication layer for Anvil — better-auth integration with plugin support",
   "type": "module",
   "exports": {
