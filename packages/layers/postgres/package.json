@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-postgres",
-  "version": "0.0.10",
+  "version": "0.0.11",
   "description": "Postgres database layer for Anvil — Drizzle ORM with connection pool lifecycle",
   "type": "module",
   "exports": {
