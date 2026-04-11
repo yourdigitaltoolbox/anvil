@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-bullmq",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "BullMQ job queue layer for Anvil — background job processing with Redis-backed queues",
   "type": "module",
   "exports": {

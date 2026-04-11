@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-sentry",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "Error reporting layer for Anvil — Sentry integration with request context",
   "type": "module",
   "exports": {
