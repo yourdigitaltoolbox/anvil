@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-build",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "Anvil build system — virtual module plugin, workspace resolver, dev server",
   "type": "module",
   "exports": {

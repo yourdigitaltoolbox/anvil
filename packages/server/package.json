@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-server",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Anvil server runtime — createServer, lifecycle, getLayer, request context",
   "type": "module",
   "exports": {
