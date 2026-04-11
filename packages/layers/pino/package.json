@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-pino",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Pino logging layer for Anvil — structured logging with JSON/pretty output",
   "type": "module",
   "exports": {

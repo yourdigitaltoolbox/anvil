@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-layer-s3",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "S3 storage layer for Anvil — object storage with AWS S3 or S3-compatible providers",
   "type": "module",
   "exports": {

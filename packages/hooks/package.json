@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-hooks",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Anvil hook system — cross-tool communication via actions, broadcasts, and filters",
   "type": "module",
   "exports": {
