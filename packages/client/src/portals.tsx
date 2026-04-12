@@ -50,8 +50,9 @@
  * ```
  */
 
-import {
+import React, {
   createContext,
+  createElement,
   useContext,
   useState,
   useEffect,
@@ -192,7 +193,7 @@ export interface PortalSlotProps {
   /** Unique slot name (e.g., 'header', 'sidebar', 'footer') */
   name: string
   /** Optional element type (default: 'div') */
-  as?: keyof JSX.IntrinsicElements
+  as?: keyof React.JSX.IntrinsicElements
   /** Optional className for the slot container */
   className?: string
   /** Optional children to render when no content is portaled in */
@@ -208,7 +209,7 @@ export interface PortalSlotProps {
  * <aside><PortalSlot name="sidebar" /></aside>
  * ```
  */
-export function PortalSlot({ name, as: Tag = 'div', className, children }: PortalSlotProps) {
+export function PortalSlot({ name, as: tag = 'div', className, children }: PortalSlotProps) {
   const registry = useRegistry()
   const [ref, setRef] = useState<HTMLElement | null>(null)
   const hasContent = usePortalHasContent(name)
@@ -220,7 +221,7 @@ export function PortalSlot({ name, as: Tag = 'div', className, children }: Porta
 
   return (
     <>
-      <Tag ref={setRef as any} className={className} />
+      {createElement(tag, { ref: setRef, className })}
       {!hasContent && children}
     </>
   )

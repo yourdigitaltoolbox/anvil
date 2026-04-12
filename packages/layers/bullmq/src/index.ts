@@ -147,6 +147,14 @@ export function bullmq(config: BullMQConfig): LayerConfig<'jobs'> {
           registerHandler: (jobName, handler) => {
             handlers.set(jobName, handler)
           },
+          registerCron: async (jobName, schedule, handler) => {
+            handlers.set(jobName, handler)
+            await queue.upsertJobScheduler(
+              jobName,
+              { pattern: schedule },
+              { name: jobName, data: {} },
+            )
+          },
           getJob: async (jobId) => {
             const job = await queue.getJob(jobId)
             if (!job) return null

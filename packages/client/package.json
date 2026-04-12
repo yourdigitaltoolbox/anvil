@@ -1,6 +1,6 @@
 {
   "name": "@ydtb/anvil-client",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "Anvil client runtime — scope-aware routing, useLayer, API client factory",
   "type": "module",
   "exports": {
