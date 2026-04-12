@@ -56,23 +56,45 @@ export function generateTailwindSources(config: AppConfig, outputDir?: string): 
 
 /**
  * Resolve a package name to a filesystem path relative to the output directory.
- * Falls back to the package name if resolution fails (e.g., in tests).
+ *
+ * Tries multiple strategies because the Vite plugin context may not have
+ * `require.resolve` available (ESM) or it may resolve to a .bun cache
+ * path instead of the workspace source.
+ *
+ * Strategy 1: Walk node_modules for the package directory (works with symlinks/workspaces)
+ * Strategy 2: require.resolve the main export and walk up to package.json
+ * Fallback: return package name as-is
  */
 function resolvePackagePath(packageName: string, outputDir?: string): string {
+  const path = require('path')
+  const fs = require('fs')
+
+  // Strategy 1: Walk node_modules from cwd (handles bun workspaces + symlinks)
   try {
-    const path = require('path')
-    const fs = require('fs')
-    // Resolve via the main export, then walk up to find package.json.
-    // Can't resolve package.json directly — exports fields may not include it.
+    const nmPath = path.join(process.cwd(), 'node_modules', ...packageName.split('/'))
+    const resolved = fs.realpathSync(nmPath)
+    if (fs.existsSync(path.join(resolved, 'package.json'))) {
+      return outputDir ? path.relative(outputDir, resolved) : resolved
+    }
+  } catch {
+    // node_modules lookup failed — try next strategy
+  }
+
+  // Strategy 2: require.resolve and walk up
+  try {
     let dir = path.dirname(require.resolve(packageName))
     while (dir !== '/' && !fs.existsSync(path.join(dir, 'package.json'))) {
       dir = path.dirname(dir)
     }
-    return outputDir ? path.relative(outputDir, dir) : dir
+    if (dir !== '/') {
+      return outputDir ? path.relative(outputDir, dir) : dir
+    }
   } catch {
-    // Fallback: return package name as-is (works if Tailwind can resolve it)
-    return packageName
+    // require.resolve failed — fall through
   }
+
+  console.warn(`[anvil-toolkit] Could not resolve filesystem path for ${packageName}, using package name as-is`)
+  return packageName
 }
 
 /**
