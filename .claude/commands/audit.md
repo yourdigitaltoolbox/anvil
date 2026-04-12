@@ -69,6 +69,8 @@ Look for code that duplicates framework functionality:
 - Custom API client factories that don't use `createApiClient` / `configureApiClients`
 - Custom virtual module generation instead of `anvilPlugin` with `toolkitModules`
 - Custom dev server setup instead of `createDevMiddleware`
+- **Infrastructure reality checks** — Code like `isRealDb()`, `isFakeDb()`, `mockDb` that tests whether infrastructure is "real." In Anvil, layers always provide a real contract implementation — `postgres()` for production, `testPostgres()` for tests. There is no fake/stub scenario. Code that branches on "is this a real database" is a pre-Anvil pattern that must be removed. Search for: `isRealDb`, `isFakeDb`, `isReal`, `fakeDb`, `mockDb`, and any pattern that duck-types infrastructure objects (e.g., `typeof db.select === 'function'`).
+- **Mocked infrastructure in tests** — Tests that mock `db`, `getLayer`, or layer contracts via `vi.mock()` / `vi.hoisted()` instead of using the layer's test variant (`testPostgres()`, `memoryJobs()`, `consoleEmail()`). The layer system provides test implementations for exactly this purpose — mocking bypasses the contract and can mask real bugs.
 
 ### 4. Boundary Violations
 
