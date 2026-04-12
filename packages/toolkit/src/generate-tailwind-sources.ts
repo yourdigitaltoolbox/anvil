@@ -61,13 +61,14 @@ export function generateTailwindSources(config: AppConfig, outputDir?: string): 
 function resolvePackagePath(packageName: string, outputDir?: string): string {
   try {
     const path = require('path')
-    // Try to resolve the package's directory via require.resolve or import.meta.resolve
-    const resolved = require.resolve(`${packageName}/package.json`)
-    const packageDir = path.dirname(resolved)
-    if (outputDir) {
-      return path.relative(outputDir, packageDir)
+    const fs = require('fs')
+    // Resolve via the main export, then walk up to find package.json.
+    // Can't resolve package.json directly — exports fields may not include it.
+    let dir = path.dirname(require.resolve(packageName))
+    while (dir !== '/' && !fs.existsSync(path.join(dir, 'package.json'))) {
+      dir = path.dirname(dir)
     }
-    return packageDir
+    return outputDir ? path.relative(outputDir, dir) : dir
   } catch {
     // Fallback: return package name as-is (works if Tailwind can resolve it)
     return packageName
