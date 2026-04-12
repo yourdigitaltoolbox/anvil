@@ -37,6 +37,13 @@ import type { JobDefinition } from '@ydtb/anvil'
 // Hook Registration Types
 // ---------------------------------------------------------------------------
 
+/**
+ * Hook registrations for a tool's server surface.
+ *
+ * When used standalone, callback parameters are typed as `unknown`.
+ * When used via `defineServer()`, TypeScript infers the actual callback
+ * types from your code — no casts needed.
+ */
 export interface ServerHooks {
   /** Action handlers — exactly one handler per action name */
   actions?: Record<string, (input: unknown) => unknown | Promise<unknown>>
@@ -113,14 +120,35 @@ export interface ServerCore {
 export type Server = ServerCore & ServerContributions
 
 /**
+ * Input type for defineServer() — accepts typed hook callbacks.
+ *
+ * Uses Function instead of specific signatures for the hooks field,
+ * which bypasses contravariance issues. TypeScript allows
+ * `(input: MyType) => MyResult` to be assigned to `Function`.
+ * The runtime hook system is string-keyed and untyped — type safety
+ * for hooks comes from `createTypedHooks()`, not from `defineServer()`.
+ */
+interface ServerInput extends Omit<ServerCore, 'hooks'> {
+  hooks?: {
+    actions?: Record<string, Function>
+    broadcasts?: Record<string, Function | Function[]>
+    filters?: Record<string, Function>
+  }
+}
+
+/**
  * Define a tool's server contribution.
+ *
+ * Accepts typed hook callbacks without requiring casts. Your callbacks
+ * keep their types at the call site; the framework erases them at the
+ * hook system boundary (which is string-keyed and dynamically typed).
+ *
+ * For compile-time safety on hook contracts between broadcaster and
+ * listener, use `createTypedHooks()` from `@ydtb/anvil-hooks/typed`.
  *
  * Core fields (schema, router, hooks, jobs, requires) are processed by the framework.
  * Extension contribution fields are collected and delivered to their owning extension.
- *
- * Accepts unknown keys beyond the core and contribution types — these are treated
- * as extension contributions collected at boot time.
  */
-export function defineServer(definition: Server & Record<string, unknown>): Server {
-  return definition
+export function defineServer(definition: ServerInput & ServerContributions & Record<string, unknown>): Server {
+  return definition as Server
 }

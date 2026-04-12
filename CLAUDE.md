@@ -86,6 +86,28 @@ Toolkit owns **mechanics** (hierarchy queries, chain traversal, `buildScopeChain
 
 These are NOT toolkit concerns. They require persistence, routes, business logic, and vary too much between apps. They belong in domain packages (scope extension).
 
+## Type Safety
+
+Type safety is a framework principle, not a convenience. The framework must never introduce `any` into public interfaces. Consumers should never need `as any` to use framework APIs — if they do, the framework has a bug.
+
+### Rules
+
+- **No `any` in public API types.** Framework interfaces use `unknown` where the type is genuinely unknown. Use generics, `Function`, or input/output type separation to let TypeScript infer concrete types at call sites.
+- **No `as any` on framework API calls.** If `getLayer()` returns `never`, the consumer is missing an `env.d.ts` import — fix the root cause. If `defineServer()` rejects typed callbacks, fix the framework's input type — don't tell consumers to cast.
+- **Use `satisfies` over `as`.** When verifying a value conforms to a type without erasing its inferred type, use `satisfies`. Reserve `as` for narrowing from a known wider type (e.g., `unknown` to a validated type after a runtime check).
+- **Narrow `unknown` explicitly.** When receiving `unknown` from dynamic systems (hooks, extension contributions), narrow with runtime validation (zod schemas, type guards) — not casts.
+- **Hook type safety via `createTypedHooks()`.** The hook system is string-keyed at runtime. Compile-time safety comes from typed wrappers — define shared event/action type maps, create typed hooks, import the types where you broadcast and listen.
+
+### Type Chain for Hooks
+
+| Layer | Type Safety Mechanism |
+|---|---|
+| Registration (`defineServer({ hooks })`) | `ServerInput` accepts typed callbacks via `Function` in input position |
+| Internal (surface processor → HookSystem) | Types erased — `unknown` internally (correct, this is a dynamic dispatch layer) |
+| Consumption (`createTypedHooks<TMap>()`) | Types restored — typed wrappers enforce contracts between broadcaster and listener |
+
+Both ends of the chain are typed. The middle is intentionally untyped because hooks are a dynamic dispatch mechanism. This is not a gap — it's by design.
+
 ## Key Design Documents
 
 - `docs/DESIGN.md` — Full framework architecture (read this first)
