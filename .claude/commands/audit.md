@@ -130,6 +130,19 @@ General code health issues that affect maintainability:
 - **Dead code from pre-Anvil patterns** — Old plugin-sdk imports, legacy compose system references, deprecated hook patterns still present.
 - **Module-level side effects** — Code that runs at import time instead of during lifecycle hooks. Connections opened, listeners registered, state mutated on import.
 - **Copy-pasted framework patterns** — Code that duplicates framework internals instead of using the public API.
+- **`useEffect` for data fetching** — Components that use `useState` + `useEffect` + `fetch`/`api.$client` to load data instead of TanStack Query's `useQuery` with `queryOptions()`. The correct pattern is:
+  ```tsx
+  // ❌ Wrong — manual fetch in useEffect
+  const [data, setData] = useState(null)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    api.$client.list({ scopeId }).then(setData).finally(() => setLoading(false))
+  }, [scopeId])
+
+  // ✅ Right — TanStack Query with oRPC queryOptions
+  const { data, isPending } = useQuery(api.list.queryOptions({ input: { scopeId } }))
+  ```
+  `useEffect` for data fetching bypasses TanStack Query's caching, deduplication, background refetching, error boundaries, and cache invalidation. It also introduces race conditions on unmount and requires manual loading/error state management. Search for: `useEffect` blocks that contain `fetch(`, `.$client.`, `.then(set`, or `setState` calls with API response data. Note: `useEffect` for UI state (scroll position, focus management, form resets, keyboard listeners) is fine — only flag data fetching patterns.
 
 ### 10. Packaging Model
 
